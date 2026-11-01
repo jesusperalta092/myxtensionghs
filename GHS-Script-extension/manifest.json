@@ -1,0 +1,246 @@
+{
+  "manifest_version": 3,
+  "name": "GHS",
+  "version": "1.5.5",
+  "description": "GHS - Agente Autónomo Universal con Superpoderes MCP y Control de Sistema Hermes OS",
+  "permissions": [
+    "storage",
+    "tabs"
+  ],
+  "host_permissions": [
+    "https://chat.deepseek.com/*",
+    "https://deepseek.com/*",
+    "https://chatgpt.com/*",
+    "https://chat.openai.com/*",
+    "https://gemini.google.com/*",
+    "https://www.kimi.ai/*",
+    "https://kimi.ai/*",
+    "https://chat.z.ai/*",
+    "https://chat.qwen.ai/*",
+    "https://arena.ai/*",
+    "https://www.meta.ai/*",
+    "https://meta.ai/*",
+    "https://claude.ai/*",
+    "https://aistudio.google.com/*",
+    "http://127.0.0.1/*",
+    "ws://127.0.0.1/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "icons": {
+    "16": "icon-16.png",
+    "48": "icon-48.png",
+    "128": "icon.png"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "GHS",
+    "default_icon": {
+      "16": "icon-16.png",
+      "48": "icon-48.png",
+      "128": "icon.png"
+    }
+  },
+  "options_page": "dashboard.html",
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "dashboard.html",
+        "dashboard.js",
+        "dashboard.css",
+        "session_manager.js",
+        "icon.png"
+      ],
+      "matches": [
+        "<all_urls>"
+      ]
+    }
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "https://chat.deepseek.com/*"
+      ],
+      "js": [
+        "core/swarm.js",
+        "core/config.js",
+        "core/parser.js",
+        "providers/deepseek.js",
+        "core/main.js"
+      ],
+      "css": [
+        "overlay.css"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://chatgpt.com/*",
+        "https://chat.openai.com/*"
+      ],
+      "js": [
+        "providers/chatgpt-cm.js"
+      ],
+      "world": "MAIN",
+      "run_at": "document_start"
+    },
+    {
+      "matches": [
+        "https://chatgpt.com/*",
+        "https://chat.openai.com/*"
+      ],
+      "js": [
+        "core/swarm.js",
+        "core/config.js",
+        "core/parser.js",
+        "providers/chatgpt.js",
+        "core/main.js"
+      ],
+      "css": [
+        "overlay.css"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://gemini.google.com/*"
+      ],
+      "js": [
+        "core/swarm.js",
+        "core/config.js",
+        "core/parser.js",
+        "providers/gemini.js",
+        "core/main.js"
+      ],
+      "css": [
+        "overlay.css"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://www.kimi.ai/*",
+        "https://kimi.ai/*"
+      ],
+      "js": [
+        "core/swarm.js",
+        "core/config.js",
+        "core/parser.js",
+        "providers/kimi.js",
+        "core/main.js"
+      ],
+      "css": [
+        "overlay.css"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://chat.z.ai/*"
+      ],
+      "js": [
+        "core/swarm.js",
+        "core/config.js",
+        "core/parser.js",
+        "providers/glm.js",
+        "core/main.js"
+      ],
+      "css": [
+        "overlay.css"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://arena.ai/*"
+      ],
+      "js": [
+        "core/swarm.js",
+        "core/config.js",
+        "core/parser.js",
+        "providers/arena.js",
+        "core/main.js"
+      ],
+      "css": [
+        "overlay.css"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://www.meta.ai/*",
+        "https://meta.ai/*"
+      ],
+      "js": [
+        "core/swarm.js",
+        "core/config.js",
+        "core/parser.js",
+        "providers/meta.js",
+        "core/main.js"
+      ],
+      "css": [
+        "overlay.css"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://chat.qwen.ai/*"
+      ],
+      "js": [
+        "providers/qwen-net.js"
+      ],
+      "world": "MAIN",
+      "run_at": "document_start"
+    },
+    {
+      "matches": [
+        "https://chat.qwen.ai/*"
+      ],
+      "js": [
+        "core/swarm.js",
+        "core/config.js",
+        "core/parser.js",
+        "providers/qwen.js",
+        "core/main.js"
+      ],
+      "css": [
+        "overlay.css"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://claude.ai/*"
+      ],
+      "js": [
+        "core/swarm.js",
+        "core/config.js",
+        "core/parser.js",
+        "providers/claude.js",
+        "core/main.js"
+      ],
+      "css": [
+        "overlay.css"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://aistudio.google.com/*"
+      ],
+      "js": [
+        "core/swarm.js",
+        "core/config.js",
+        "core/parser.js",
+        "providers/aistudio.js",
+        "core/main.js"
+      ],
+      "css": [
+        "overlay.css"
+      ],
+      "run_at": "document_idle"
+    }
+  ]
+}

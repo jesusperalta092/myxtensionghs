@@ -1,0 +1,120 @@
+{
+  "catalog": {
+    "blender": {
+      "name": "Blender 3D Studio",
+      "category": "3d",
+      "description": "Control de modelado, animación, materiales, luces y renderizado en Blender en tiempo real.",
+      "command": "blender_mcp/mcp/.venv/Scripts/blender-mcp.exe",
+      "args": [],
+      "default_enabled": true,
+      "requires": "Blender con extensión MCP activa"
+    },
+    "filesystem": {
+      "name": "Archivos Locales (Filesystem)",
+      "category": "system",
+      "description": "Leer, crear, modificar y buscar archivos en tus carpetas locales (Escritorio, Descargas, etc.).",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "C:\\Users\\USER\\Desktop",
+        "C:\\Users\\USER\\Downloads"
+      ],
+      "default_enabled": false,
+      "requires": "Node.js (npx)"
+    },
+    "fetch": {
+      "name": "Navegación Web (Fetch)",
+      "category": "web",
+      "description": "Extraer texto, documentación y datos directamente de cualquier página web o API.",
+      "command": "npx.cmd",
+      "args": [
+        "-y",
+        "mcp-fetch-server"
+      ],
+      "default_enabled": false,
+      "requires": "Node.js (npx)"
+    },
+    "sqlite": {
+      "name": "Base de Datos SQLite Local",
+      "category": "database",
+      "description": "Crear y consultar bases de datos SQL locales para análisis y almacenamiento estructurado.",
+      "command": "npx.cmd",
+      "args": [
+        "-y",
+        "sqlite-mcp-server"
+      ],
+      "default_enabled": false,
+      "requires": "Node.js (npx)"
+    },
+    "memory": {
+      "name": "Grafo de Memoria Persistente",
+      "category": "memory",
+      "description": "Memoria a largo plazo mediante grafos de entidades y relaciones compartidas entre sesiones.",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-memory"
+      ],
+      "default_enabled": false,
+      "requires": "Node.js (npx)"
+    },
+    "taste": {
+      "name": "Taste Engine (Leon Lin)",
+      "category": "design",
+      "description": "Criterio estético anti-slop, calibración de varianza visual, dirección de arte intencional y eliminación de patrones genéricos de IA.",
+      "command": "hermes_skills",
+      "args": [
+        "creative/taste-skill"
+      ],
+      "default_enabled": true,
+      "requires": "Hermes Skills Engine"
+    },
+    "emil_motion": {
+      "name": "Emil Kowalski Motion Suite",
+      "category": "design",
+      "description": "Físicas de resortes, curvas cubic-bezier de desaceleración fuerte, micro-interacciones táctiles y transiciones con tiempos < 300ms.",
+      "command": "hermes_skills",
+      "args": [
+        "creative/emil-motion"
+      ],
+      "default_enabled": true,
+      "requires": "Hermes Skills Engine"
+    },
+    "impeccable": {
+      "name": "Impeccable Design System",
+      "category": "design",
+      "description": "Grilla espacial estricta de 8 puntos, jerarquía tipográfica armónica, contraste WCAG AAA y linter determinista anti-patrones.",
+      "command": "hermes_skills",
+      "args": [
+        "creative/impeccable-design"
+      ],
+      "default_enabled": true,
+      "requires": "Hermes Skills Engine"
+    },
+    "playwright": {
+      "name": "Playwright Visual Auditor (MCP)",
+      "category": "browser",
+      "description": "Navegación headless automatizada, capturas de pantalla visuales en bucle cerrado, pruebas de clics y auto-corrección de UI.",
+      "command": "npx.cmd",
+      "args": [
+        "-y",
+        "@playwright/mcp@latest"
+      ],
+      "default_enabled": false,
+      "requires": "Node.js (npx)"
+    },
+    "figma": {
+      "name": "Figma Design Bridge (MCP)",
+      "category": "design",
+      "description": "Inspección de maquetas, lectura de tokens de color, variables, espaciados y componentes directamente desde archivos Figma.",
+      "command": "npx.cmd",
+      "args": [
+        "-y",
+        "figma-mcp"
+      ],
+      "default_enabled": false,
+      "requires": "Figma Access Token"
+    }
+  }
+}
