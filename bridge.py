@@ -474,7 +474,7 @@ def _reclaim_bridge_port():
     relaunches start.bat while an earlier bridge.py is still running - window
     closed with the X instead of Ctrl+C, a previous crash that left a detached
     python, or a double double-click. The old process still holds the port, so
-    websockets.serve() dies on bind with a cryptic (localised) OSError and the
+    websockets.serve(, process_request=process_request) dies on bind with a cryptic (localised) OSError and the
     whole bridge exits code 1.
 
     We reuse _port_owner (already generic over the port) and only ever kill a
@@ -2787,28 +2787,16 @@ async def _supervised(name, coro_factory):
 
 
 
-# ── HEALTH CHECK PARA RENDER ──
-import threading
-from http.server import BaseHTTPRequestHandler, HTTPServer
 
-class HealthHandler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        self.send_response(200)
-        self.send_header('Content-type', 'text/plain')
-        self.end_headers()
-        self.wfile.write(b'GHS Bridge is alive')
-    def log_message(self, format, *args):
-        pass
 
-def start_health_server():
-    port = int(os.environ.get('PORT', 17613))
-    server = HTTPServer(('0.0.0.0', port), HealthHandler)
-    server.serve_forever()
-
+# ── HEALTH CHECK PARA RENDER (en el mismo puerto que WS) ──
+async def process_request(path, request_headers):
+    if request_headers.get("Upgrade", "").lower() == "websocket":
+        return None  # Es WebSocket, dejar pasar
+    # Es una peticion HTTP normal (Health Check de Render)
+    return (200, [("Content-Type", "text/plain")], b"GHS Bridge is alive")
 
 async def main():
-    # Iniciar health server para Render
-    threading.Thread(target=start_health_server, daemon=True).start()
     print(f"\n{C['cy']}  GHS Bridge v{BRIDGE_VERSION}{C['reset']}  {C['dim']}- Roblox Studio - ws://{HOST}:{PORT}{C['reset']}\n")
     log(f"===== BRIDGE START  v{BRIDGE_VERSION}  pid={os.getpid()}  log={LOG_PATH} =====", "cy")
     await asyncio.to_thread(_kill_orphan_studio_mcp)
