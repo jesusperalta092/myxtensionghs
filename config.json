@@ -1,0 +1,17 @@
+{
+  "mcpServers": {
+    "hermes": {
+      "command": "python",
+      "args": [
+        "hermes_mcp_server.py"
+      ]
+    }
+  },
+  "security": {
+    "sandbox_dir": "/tmp/ghs_workspace",
+    "allow_read": true,
+    "allow_write": true,
+    "allow_delete": false,
+    "allow_shell": false
+  }
+}
