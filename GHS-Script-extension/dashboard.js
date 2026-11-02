@@ -167,14 +167,17 @@
           return;
       }
       // ── SKILLS LIST DINAMICO ──
-      if (msg.id === "skills_list_init" && msg.text) {
-        try {
-          const parsed = JSON.parse(msg.text);
-          if (parsed.skills) {
-            renderSkillCards(parsed.skills);
-            return;
-          }
-        } catch(e) { console.warn("Skills parse error:", e); }
+      if (msg.id === "skills_list_init") {
+        const raw = msg.text || (msg.content && msg.content[0] && msg.content[0].text) || "";
+        if (raw) {
+          try {
+            const parsed = typeof raw === "object" ? raw : JSON.parse(raw);
+            if (parsed && Array.isArray(parsed.skills) && parsed.skills.length > 0) {
+              renderSkillCards(parsed.skills);
+              return;
+            }
+          } catch(e) { console.warn("Skills parse error:", e); }
+        }
       }
       // ── TOGGLE SKILL ACK ──
       if (msg.id && msg.id.startsWith("toggle_") && msg.text) {
@@ -2334,6 +2337,23 @@ Por favor espera unos segundos mientras la IA razona y estructura el blueprint..
       btnRefresh.addEventListener("click", () => {
         connectBridge();
         appendLog("[APP] Estado refrescado manualmente.");
+      });
+    }
+
+    const btnReloadMcp = document.getElementById("btn-reload-mcp");
+    if (btnReloadMcp) {
+      btnReloadMcp.addEventListener("click", () => {
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({
+            type: "call_tool",
+            id: "skills_list_init",
+            name: "hermes_skills_list",
+            arguments: {}
+          }));
+          appendLog("[MCP] Solicitando recarga de catálogo de herramientas...");
+        } else {
+          connectBridge();
+        }
       });
     }
   });

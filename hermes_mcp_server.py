@@ -62,12 +62,24 @@ except Exception:
 # ─────────────────────────────────────────────────────────────────────────────
 # Hermes Agent Native Integration (hermes-agent(mod))
 # ─────────────────────────────────────────────────────────────────────────────
-MOD_DIR = os.path.join(os.path.dirname(__file__), "hermes-agent(mod)")
+candidate_dirs = [
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), "hermes-agent(mod)"),
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), "2-BACKEND-NUBE-RENDER", "hermes-agent(mod)"),
+    r"C:\Users\USER\Downloads\GHS-Script-Free\hermes-agent(mod)",
+    r"C:\Users\USER\Downloads\GHS-Proyecto-Final\hermes-agent(mod)",
+    os.path.join(os.environ.get("LOCALAPPDATA", ""), "hermes", "hermes-agent(mod)"),
+]
+MOD_DIR = None
+for cd in candidate_dirs:
+    if os.path.exists(cd):
+        MOD_DIR = cd
+        break
+
 HERMES_NATIVE_AVAILABLE = False
 _handle_function_call = None
 _hermes_registry = None
 
-if os.path.exists(MOD_DIR):
+if MOD_DIR and os.path.exists(MOD_DIR):
     if MOD_DIR not in sys.path:
         sys.path.insert(0, MOD_DIR)
     try:
@@ -77,7 +89,7 @@ if os.path.exists(MOD_DIR):
         _handle_function_call = handle_function_call
         _hermes_registry = registry
         HERMES_NATIVE_AVAILABLE = True
-        sys.stderr.write(f"[hermes-mcp] Loaded {len(registry._tools)} native Hermes tools from hermes-agent(mod)\n")
+        sys.stderr.write(f"[hermes-mcp] Loaded {len(registry._tools)} native Hermes tools from hermes-agent(mod) [{MOD_DIR}]\n")
         sys.stderr.flush()
     except Exception as e:
         sys.stderr.write(f"[hermes-mcp] Warning: Could not load native hermes-agent(mod): {e}\n")
