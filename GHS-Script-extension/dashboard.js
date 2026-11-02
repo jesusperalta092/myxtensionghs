@@ -137,10 +137,14 @@
   function handleBridgeMessage(msg) {
     const type = msg.type;
     if (type === "connected") {
-      appendLog(`[STATUS] Servidores MCP activos: ${(msg.servers || []).length}. Total herramientas: ${(msg.tools || []).length}.`);
+      const totalTools = (msg.tools || []).length;
+      const totalServers = (msg.servers || []).length;
+      appendLog(`[STATUS] Servidores MCP activos: ${totalServers}. Total herramientas: ${totalTools}.`);
       updateMcpCards(msg.servers || []);
-      const mcpCountEl = document.getElementById("mcp-count");
-      if (mcpCountEl) mcpCountEl.textContent = (msg.servers || []).filter(s => s.alive).length;
+      const elServers = document.getElementById("mcp-stat-servers");
+      if (elServers) elServers.textContent = `🟢 ${totalServers} Servidores MCP`;
+      const elTools = document.getElementById("mcp-stat-tools");
+      if (elTools) elTools.textContent = `⚡ ${totalTools} Herramientas MCP`;
     } else if (type === "tool_result") {
       if (handleProjectMessages(msg)) return;
       if (msg.id && msg.id.startsWith("read_brain_")) {
@@ -2685,9 +2689,11 @@ Por favor espera unos segundos mientras la IA razona y estructura el blueprint..
       "data-science": { color: "#f59e0b", label: "DATA" },
       mlops: { color: "#ef4444", label: "MLOPS" }
     };
-    // Actualizar el contador dinámico en el menú lateral
+    // Actualizar el contador dinámico en el menú lateral y píldoras
     const countEl = document.getElementById("mcp-count");
     if (countEl) countEl.textContent = skills.length;
+    const elSkills = document.getElementById("mcp-stat-skills");
+    if (elSkills) elSkills.textContent = `🧠 ${skills.length} Skills Activas`;
 
     // Diccionario de traducciones y mejoras
     const translations = {

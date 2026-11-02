@@ -3208,7 +3208,19 @@ def main():
                 pass
 
             elif method == "tools/list":
-                send_response(rid, {"tools": TOOLS})
+                all_tools = list(TOOLS)
+                if HERMES_NATIVE_AVAILABLE and _hermes_registry is not None:
+                    for tname, t in _hermes_registry._tools.items():
+                        if not any(x.get("name") == tname for x in all_tools):
+                            schema = getattr(t, "parameters", None) or getattr(t, "input_schema", None)
+                            if not schema or not isinstance(schema, dict):
+                                schema = {"type": "object", "properties": {}}
+                            all_tools.append({
+                                "name": tname,
+                                "description": (getattr(t, "description", "") or f"Nous Hermes tool: {tname}").split("\n")[0][:140],
+                                "inputSchema": schema
+                            })
+                send_response(rid, {"tools": all_tools})
 
             elif method == "tools/call":
                 name = params.get("name")
@@ -3260,6 +3272,8 @@ def main():
                     res = _tool_android_build_apk(args)
                 elif name == "android_install_adb":
                     res = _tool_android_install_adb(args)
+                elif HERMES_NATIVE_AVAILABLE and _hermes_registry is not None and name in _hermes_registry._tools:
+                    res = _tool_native_dispatch(name, args)
                 else:
                     send_response(rid, error={"code": -32601, "message": f"Tool '{name}' not found."})
                     continue

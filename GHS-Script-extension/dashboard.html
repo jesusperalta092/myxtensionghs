@@ -63,8 +63,8 @@
       <nav class="nav-menu">
         <button class="nav-item active" data-tab="mcp">
           <span class="nav-icon">⚡</span>
-          <span class="nav-label">Superpoderes MCP</span>
-          <span class="nav-counter" id="mcp-count">4</span>
+          <span class="nav-label">Superpoderes & Skills</span>
+          <span class="nav-counter" id="mcp-count">82</span>
         </button>
         <button class="nav-item" data-tab="playbooks">
           <span class="nav-icon">🧠</span>
@@ -139,8 +139,13 @@
       <section class="tab-pane active" id="pane-mcp">
         <div class="pane-header">
           <div>
-            <h1 class="pane-title">⚡ Catálogo de Superpoderes MCP</h1>
-            <p class="pane-desc">Activa o desactiva herramientas locales con 1 clic. El puente y la IA se actualizan en vivo.</p>
+            <h1 class="pane-title">⚡ Catálogo de Superpoderes & Skills Hermes</h1>
+            <p class="pane-desc">Activa o desactiva habilidades locales con 1 clic. El puente y la IA se actualizan en vivo.</p>
+            <div id="mcp-stats-pill" style="display:flex; flex-wrap:wrap; gap:8px; margin-top:8px;">
+              <span id="mcp-stat-servers" style="background:rgba(16,185,129,0.12); color:#10b981; border:1px solid rgba(16,185,129,0.25); padding:3px 10px; border-radius:6px; font-size:12px; font-weight:700;">🟢 9 Servidores MCP</span>
+              <span id="mcp-stat-tools" style="background:rgba(59,130,246,0.12); color:#3b82f6; border:1px solid rgba(59,130,246,0.25); padding:3px 10px; border-radius:6px; font-size:12px; font-weight:700;">⚡ 164 Herramientas MCP</span>
+              <span id="mcp-stat-skills" style="background:rgba(245,158,11,0.12); color:#f59e0b; border:1px solid rgba(245,158,11,0.25); padding:3px 10px; border-radius:6px; font-size:12px; font-weight:700;">🧠 82 Skills Activas</span>
+            </div>
           </div>
           <button class="btn-primary" id="btn-reload-mcp">⟳ Recargar Servidores</button>
         </div>
