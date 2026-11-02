@@ -3230,8 +3230,6 @@ NO te detengas a explicar lo que vas a hacer ni esperes confirmación del usuari
           <span id="zs-brand">GHS <span class="zs-free">v${EXT_VERSION}</span></span>
           <span id="zs-state"></span>
           <button id="zs-role-pill" class="zs-role-pill zs-role-standalone" title="Rol Enjambre: Click para alternar (Solo / Arquitecto / Obrero)">Solo</button>
-          <button id="zs-hermes-btn" class="zs-hermes-btn" title="Modo Hermes Agent: Conexión con Windows OS. Clic para alternar.">Hermes</button>
-          <button id="zs-mode-btn" class="zs-mode-btn" title="Modo del Puente: Clic para alternar entre PC Local (127.0.0.1) y Nube (Render)">💻 Local</button>
           <button id="zs-folder-btn" class="zs-folder-btn" title="Vincular Carpeta de tu PC para que el Agente en la Nube trabaje en tus archivos">📁 Carpeta</button>
           <button id="zs-dashboard-btn" class="zs-dashboard-btn" title="Abrir Interfaz en pantalla grande (Superpoderes, Playbooks, Lotes y Logs)">Interfaz</button>
           <button id="zs-mcp-btn" class="zs-mcp-btn" title="Poderes MCP: Activar o desactivar herramientas">Poderes</button>

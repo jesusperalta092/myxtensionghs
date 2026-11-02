@@ -46,7 +46,8 @@ function getWsUrl() {
   if (bridgeWsCustom && bridgeWsCustom.length > 5) {
     return bridgeWsCustom;
   }
-  return DEFAULT_LOCAL_WS;
+  // Por defecto se conecta a la Nube en Render
+  return DEFAULT_CLOUD_WS;
 }
 
 // Chat sites where a GHS provider content script runs. Status pushes go
