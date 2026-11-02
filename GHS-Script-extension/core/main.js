@@ -1030,6 +1030,18 @@
     }
   }
 
+    async function ghsClearWorkspace() {
+    ghsLocalDirName = "";
+    ghsLocalFileIndex = {};
+    ghsUpdateFolderUI();
+    try {
+      const db = await ghsOpenDB();
+      const tx = db.transaction("workspace", "readwrite");
+      tx.objectStore("workspace").delete("current_workspace");
+    } catch (_) {}
+    console.log("[GHS FS] Workspace cleared by user.");
+  }
+
   function ghsUpdateFolderUI() {
     try {
       const btn = document.querySelector("#zs-folder-btn");
@@ -1193,8 +1205,12 @@
       try { console.log(`[GHS memory] Forced action=context`); } catch(_) {}
     }
     const bareName = bareToolName(name);
-    // ── BROWSER LOCAL WORKSPACE INTERCEPTOR (100% Nube sin puente local) ──
-    if (ghsLocalDirName && Object.keys(ghsLocalFileIndex).length) {
+    // ── BROWSER LOCAL WORKSPACE INTERCEPTOR ──
+    // REGLA FUNDAMENTAL: Si el puente local está conectado, NUNCA interceptar.
+    // Toda ejecución (terminal, código Python, archivos) debe correr 100% nativa en Windows.
+    const isLocalBridge = !!(A.bridge && A.bridge.connected);
+
+    if (!isLocalBridge && ghsLocalDirName && Object.keys(ghsLocalFileIndex).length) {
       const _bn = bareToolName(name);
 
       // 1. hermes_file_read
@@ -1205,6 +1221,8 @@
           diag("browser_fs.read", { path: p, len: content.length });
           return `Output of '${name}':\n${content}`;
         }
+        // Si no está en el índice de la carpeta vinculada actual:
+        return `Output of '${name}':\n[MODO NUBE] El archivo o ruta '${p}' no se encuentra en la carpeta vinculada actual ('${ghsLocalDirName}'). Para acceder a cualquier ruta en tu disco C:\\ o a otros proyectos: cambia a '💻 Local' en la barra superior o carga esa carpeta con el botón 📁.`;
       }
 
       // 2. hermes_file_write
@@ -1229,42 +1247,25 @@
         }
       }
 
-      // 4. hermes_terminal con comandos de listado o inspección
+      // 4. hermes_terminal (solo para listar la carpeta vinculada actual o leer archivos locales)
       if (_bn === "hermes_terminal") {
-        const cmd = (args && (args.command || args.cmd)) || "";
-        if (/Get-ChildItem|dir\b|ls\b|tree\b/i.test(cmd)) {
+        const cmd = ((args && (args.command || args.cmd)) || "").trim();
+        // Listado genérico de la carpeta vinculada:
+        if (/^(?:Get-ChildItem|dir|ls|tree)(?:\s+['"]?(?:\.|\.\/|\\)?['"]?)?$/i.test(cmd)) {
           diag("browser_fs.terminal_list", { cmd });
           return `Output of 'hermes_terminal':\n${ghsListLocalFiles()}`;
         }
-        if (/\b(?:cat|type|Get-Content)\s+['"]?([^'"]+)['"]?/i.test(cmd)) {
-          const m = cmd.match(/\b(?:cat|type|Get-Content)\s+['"]?([^'"]+)['"]?/i);
-          if (m && m[1]) {
-            const content = await ghsReadLocalFile(m[1].trim());
-            if (content !== null) return `Output of 'hermes_terminal':\n${content}`;
-          }
+        // Lectura de archivo específico de la carpeta vinculada:
+        const catMatch = cmd.match(/\b(?:cat|type|Get-Content)\s+['"]?([^'"]+)['"]?/i);
+        if (catMatch && catMatch[1]) {
+          const content = await ghsReadLocalFile(catMatch[1].trim());
+          if (content !== null) return `Output of 'hermes_terminal':\n${content}`;
         }
+        // Si el comando apunta a otra ruta externa fuera de la carpeta vinculada:
+        return `Output of 'hermes_terminal':\n[MODO NUBE] Estás conectado a la nube y solo tienes vinculada la carpeta '${ghsLocalDirName}'. No es posible ejecutar comandos en otras rutas del sistema operativo como '${cmd}' desde el navegador. Para tener acceso completo a tu terminal de Windows, PowerShell y todo tu disco C:\\, cambia al modo '💻 Local' en la barra superior.`;
       }
 
-      // 5. hermes_execute_code con os.walk, os.listdir, os.path.exists o lectura
-      if (_bn === "hermes_execute_code") {
-        const pycode = (args && (args.code || args.script)) || "";
-        if (/os\.(?:walk|listdir|path\.exists|path\.isdir)/i.test(pycode)) {
-          diag("browser_fs.code_fs", { codeLen: pycode.length });
-          const items = Object.values(ghsLocalFileIndex);
-          const lines = items.map((i) => `${i.path} | ${(i.size / 1024).toFixed(1)} KB`).join("\n");
-          return `Output of 'hermes_execute_code':\n{"status": "success", "output": "Existe: True\nCarpeta vinculada: ${ghsLocalDirName}\nTotal listado: ${items.length}\n\n${lines}\n", "exit_code": 0}`;
-        }
-        if (/open\s*\(\s*['"]([^'"]+)['"]/i.test(pycode)) {
-          const m = pycode.match(/open\s*\(\s*['"]([^'"]+)['"]/i);
-          if (m && m[1]) {
-            const content = await ghsReadLocalFile(m[1].trim());
-            if (content !== null) {
-              const snippet = content.slice(0, 8000);
-              return `Output of 'hermes_execute_code':\n{"status": "success", "output": ${JSON.stringify(snippet)}, "exit_code": 0}`;
-            }
-          }
-        }
-      }
+      // NOTA: hermes_execute_code NUNCA debe fingir resultados. Viaja al backend directamente.
     }
 
     if (isBlockedTool(name)) {
