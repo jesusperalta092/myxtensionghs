@@ -23,21 +23,28 @@ try {
 
 const DEFAULT_CLOUD_WS = "wss://ghs-cloud-backend.onrender.com";
 const DEFAULT_LOCAL_WS = "ws://127.0.0.1:17613";
-let bridgeWsCustom = null;
+let bridgeWsCustom = DEFAULT_LOCAL_WS;
 
 try {
   chrome.storage.local.get(["zsWsUrl", "zsMode"], (r) => {
-    if (r && r.zsWsUrl) bridgeWsCustom = r.zsWsUrl.trim();
-    if (r && r.zsMode === "local") bridgeWsCustom = DEFAULT_LOCAL_WS;
-    if (r && r.zsMode === "cloud") bridgeWsCustom = DEFAULT_CLOUD_WS;
+    if (r && r.zsMode === "cloud") {
+      bridgeWsCustom = DEFAULT_CLOUD_WS;
+    } else {
+      bridgeWsCustom = DEFAULT_LOCAL_WS;
+      if (!r || r.zsMode !== "local") {
+        chrome.storage.local.set({ zsMode: "local" });
+      }
+    }
   });
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area === "local") {
-      if (changes.zsWsUrl) bridgeWsCustom = (changes.zsWsUrl.newValue || "").trim();
       if (changes.zsMode) {
-        bridgeWsCustom = changes.zsMode.newValue === "local" ? DEFAULT_LOCAL_WS : DEFAULT_CLOUD_WS;
+        bridgeWsCustom = changes.zsMode.newValue === "cloud" ? DEFAULT_CLOUD_WS : DEFAULT_LOCAL_WS;
+        if (ws) { try { ws.close(); } catch { } }
+      } else if (changes.zsWsUrl && bridgeWsCustom !== DEFAULT_LOCAL_WS) {
+        bridgeWsCustom = (changes.zsWsUrl.newValue || "").trim() || DEFAULT_CLOUD_WS;
+        if (ws) { try { ws.close(); } catch { } }
       }
-      if (ws) { try { ws.close(); } catch { } }
     }
   });
 } catch { }
@@ -46,8 +53,7 @@ function getWsUrl() {
   if (bridgeWsCustom && bridgeWsCustom.length > 5) {
     return bridgeWsCustom;
   }
-  // Por defecto se conecta a la Nube en Render
-  return DEFAULT_CLOUD_WS;
+  return DEFAULT_LOCAL_WS;
 }
 
 // Chat sites where a GHS provider content script runs. Status pushes go
@@ -559,6 +565,8 @@ function statusObj(targetTabId = null) {
     studioApp,
     studioProc,
     tools: toolsCache.length,
+    isLocal: getWsUrl() === DEFAULT_LOCAL_WS,
+    wsUrl: getWsUrl(),
     servers: serversCache,
     security: securityCache,
     role: currentRole,

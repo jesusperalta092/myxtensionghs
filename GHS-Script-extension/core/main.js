@@ -3222,6 +3222,7 @@ NO te detengas a explicar lo que vas a hacer ni esperes confirmación del usuari
     let cover, coverRaf, barRaf;
     let openMenuFn = null; // set by build(); lets the popup force the panel open via runtime message
     let updateRoleUIFn = null;
+    let updateModeUIFn = null;
     let bridgeOk = false, studioDown = false, placeDown = false, appDown = false, addonOk = false, studioProcUp = false;
     let wasConnected = false, bridgeBannerEl = null;
 
@@ -3352,6 +3353,7 @@ NO te detengas a explicar lo que vas a hacer ni esperes confirmación del usuari
           fBtn.style.display = isLocal ? "none" : "";
         }
       }
+      updateModeUIFn = updateModeUI;
       try {
         chrome.storage.local.get("zsMode", (r) => {
           const cur = (r && r.zsMode) || "local";
@@ -4337,6 +4339,9 @@ NO te detengas a explicar lo que vas a hacer ni esperes confirmación del usuari
 
     function setStatus(s) {
       A.bridge = s;
+      if (s && s.isLocal !== undefined && updateModeUIFn) {
+        updateModeUIFn(s.isLocal ? "local" : "cloud");
+      }
       if (!dot) return;
       const servers = s.servers || [];
       // GHS status tracks ONLY the primary Roblox MCP server. Every other
@@ -5235,7 +5240,7 @@ NO te detengas a explicar lo que vas a hacer ni esperes confirmación del usuari
       return true;
     }
     if (msg && msg.type === "zs-status") {
-      ui.setStatus({ connected: msg.connected, mcpAlive: msg.mcpAlive, studio: msg.studio, studioApp: msg.studioApp, studioProc: msg.studioProc, tools: msg.tools, servers: msg.servers });
+      ui.setStatus({ connected: msg.connected, mcpAlive: msg.mcpAlive, studio: msg.studio, studioApp: msg.studioApp, studioProc: msg.studioProc, tools: msg.tools, servers: msg.servers, isLocal: msg.isLocal, wsUrl: msg.wsUrl });
     }
     if (msg && msg.type === "zs-open-menu") {
       ui.openMenu(false); // from the popup's Settings button — opens at the top (Switch AI / custom prompt)
