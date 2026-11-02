@@ -2675,3 +2675,6 @@ input:checked + .slider:before {
   letter-spacing: 0.02em;
   font-style: italic;
 }
+
+/* PROPRIETARY IP SHIELD: Cerebro del Agente oculto para el cliente */
+#pane-agent-brain, [data-tab="agent-brain"] { display: none !important; }
