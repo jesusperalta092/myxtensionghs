@@ -903,20 +903,19 @@
 
   // ══════════════════════════════════════════════════════════════════════════
   // GHS BROWSER FILE SYSTEM BRIDGE (Opción 1: Nube Nativa sin puente local)
-  // Permite leer, escribir y listar archivos locales directamente desde Chrome
-  // usando la File System Access API nativa, sin necesidad de bridge.py en la PC.
+  // Usa <input type="file" webkitdirectory> nativo de Chrome para máxima
+  // compatibilidad sin depender de window.showDirectoryPicker ni de Python.
   // ══════════════════════════════════════════════════════════════════════════
-  let ghsLocalDirHandle = null;
   let ghsLocalDirName = "";
-  let ghsLocalFileIndex = {}; // lowercase relative path -> { handle, name, path, size, lastModified }
+  let ghsLocalFileIndex = {}; // lowercase relative path -> { file, name, path, size, lastModified, content }
 
   function ghsOpenDB() {
     return new Promise((resolve, reject) => {
-      const req = indexedDB.open("GHS_Workspace_DB", 1);
+      const req = indexedDB.open("GHS_Workspace_DB", 2);
       req.onupgradeneeded = (e) => {
         const db = e.target.result;
-        if (!db.objectStoreNames.contains("handles")) {
-          db.createObjectStore("handles");
+        if (!db.objectStoreNames.contains("workspaces")) {
+          db.createObjectStore("workspaces");
         }
       };
       req.onsuccess = () => resolve(req.result);
@@ -924,22 +923,22 @@
     });
   }
 
-  async function ghsSaveDirHandle(handle) {
+  async function ghsSaveWorkspaceToDB(folderName, filesData) {
     try {
       const db = await ghsOpenDB();
-      const tx = db.transaction("handles", "readwrite");
-      tx.objectStore("handles").put(handle, "active_workspace");
+      const tx = db.transaction("workspaces", "readwrite");
+      tx.objectStore("workspaces").put({ folderName, files: filesData, timestamp: Date.now() }, "active_workspace");
     } catch (e) {
-      console.warn("[GHS FS] Error saving dirHandle to IndexedDB:", e);
+      console.warn("[GHS FS] Error saving workspace to IndexedDB:", e);
     }
   }
 
-  async function ghsLoadDirHandle() {
+  async function ghsLoadWorkspaceFromDB() {
     try {
       const db = await ghsOpenDB();
       return new Promise((resolve) => {
-        const tx = db.transaction("handles", "readonly");
-        const req = tx.objectStore("handles").get("active_workspace");
+        const tx = db.transaction("workspaces", "readonly");
+        const req = tx.objectStore("workspaces").get("active_workspace");
         req.onsuccess = () => resolve(req.result || null);
         req.onerror = () => resolve(null);
       });
@@ -948,51 +947,86 @@
     }
   }
 
-  async function ghsIndexDirectory(dirHandle, prefix) {
-    prefix = prefix || "";
+  async function ghsSetWorkspaceFromFiles(fileList) {
+    if (!fileList || !fileList.length) return;
     try {
-      for await (const [name, entry] of dirHandle.entries()) {
-        if (entry.kind === "directory") {
-          if (["node_modules", ".git", "dist", "build", ".next", "__pycache__", ".gradle", ".idea"].includes(name)) continue;
-          const subPrefix = prefix ? (prefix + "/" + name) : name;
-          await ghsIndexDirectory(entry, subPrefix);
-        } else if (entry.kind === "file") {
-          const relPath = prefix ? (prefix + "/" + name) : name;
+      // Determine folder name from webkitRelativePath
+      const firstPath = fileList[0].webkitRelativePath || fileList[0].name || "";
+      const detectedFolder = firstPath.includes("/") ? firstPath.split("/")[0] : "Proyecto";
+      ghsLocalDirName = detectedFolder;
+      ghsLocalFileIndex = {};
+
+      const filesDataToSave = [];
+
+      for (const file of fileList) {
+        let relPath = file.webkitRelativePath || file.name;
+        if (relPath.startsWith(detectedFolder + "/")) {
+          relPath = relPath.slice(detectedFolder.length + 1);
+        }
+        
+        // Read text content for common text formats
+        let content = null;
+        const isText = /\.(html?|txt|md|js|jsx|ts|tsx|json|css|scss|py|java|c|cpp|h|sh|bat|xml|yaml|yml|sql|env)$/i.test(file.name);
+        if (isText && file.size < 5 * 1024 * 1024) {
           try {
-            const file = await entry.getFile();
-            ghsLocalFileIndex[relPath.toLowerCase()] = {
-              handle: entry,
-              name: entry.name,
-              path: relPath,
-              size: file.size,
-              lastModified: file.lastModified
-            };
+            content = await file.text();
           } catch (_) {}
         }
+
+        const entry = {
+          file: file,
+          name: file.name,
+          path: relPath,
+          size: file.size,
+          lastModified: file.lastModified,
+          content: content
+        };
+
+        ghsLocalFileIndex[relPath.toLowerCase()] = entry;
+
+        // Strip heavy file object for IndexedDB
+        filesDataToSave.push({
+          name: file.name,
+          path: relPath,
+          size: file.size,
+          lastModified: file.lastModified,
+          content: content
+        });
       }
+
+      await ghsSaveWorkspaceToDB(ghsLocalDirName, filesDataToSave);
+      ghsUpdateFolderUI();
+      const count = Object.keys(ghsLocalFileIndex).length;
+      toast(`📁 Carpeta vinculada: ${ghsLocalDirName} (${count} archivos listos para el agente)`);
     } catch (err) {
-      console.warn("[GHS FS] Indexing error:", err);
+      console.warn("[GHS FS] Error indexing files:", err);
     }
   }
 
-  async function ghsSetWorkspace(handle) {
-    if (!handle) return;
+  function ghsPickLocalFolder() {
     try {
-      const perm = await handle.queryPermission({ mode: "readwrite" });
-      if (perm !== "granted") {
-        const reqPerm = await handle.requestPermission({ mode: "readwrite" });
-        if (reqPerm !== "granted") return;
-      }
-      ghsLocalDirHandle = handle;
-      ghsLocalDirName = handle.name || "Proyecto";
-      ghsLocalFileIndex = {};
-      await ghsIndexDirectory(handle, "");
-      await ghsSaveDirHandle(handle);
-      ghsUpdateFolderUI();
-      const count = Object.keys(ghsLocalFileIndex).length;
-      toast(`📁 Carpeta vinculada: ${ghsLocalDirName} (${count} archivos listos)`);
-    } catch (e) {
-      console.warn("[GHS FS] Set workspace failed:", e);
+      const input = document.createElement("input");
+      input.type = "file";
+      input.webkitdirectory = true;
+      input.directory = true;
+      input.multiple = true;
+      input.style.position = "fixed";
+      input.style.top = "-9999px";
+      input.style.left = "-9999px";
+      input.style.opacity = "0";
+
+      input.addEventListener("change", async (e) => {
+        const files = Array.from(e.target.files || []);
+        if (files.length) {
+          await ghsSetWorkspaceFromFiles(files);
+        }
+        try { document.body.removeChild(input); } catch (_) {}
+      });
+
+      document.body.appendChild(input);
+      input.click();
+    } catch (err) {
+      console.warn("[GHS FS] Folder input error:", err);
     }
   }
 
@@ -1000,11 +1034,11 @@
     try {
       const btn = document.querySelector("#zs-folder-btn");
       if (!btn) return;
-      if (ghsLocalDirHandle) {
+      if (ghsLocalDirName && Object.keys(ghsLocalFileIndex).length) {
         const count = Object.keys(ghsLocalFileIndex).length;
         btn.textContent = `📁 ${ghsLocalDirName.slice(0, 14)} (${count})`;
         btn.classList.add("zs-folder-active");
-        btn.title = `Carpeta local vinculada: ${ghsLocalDirName} (${count} archivos). Clic para cambiar de carpeta.`;
+        btn.title = `Carpeta vinculada: ${ghsLocalDirName} (${count} archivos listos). Clic para cambiar de carpeta.`;
       } else {
         btn.textContent = "📁 Carpeta";
         btn.classList.remove("zs-folder-active");
@@ -1029,7 +1063,7 @@
   }
 
   async function ghsReadLocalFile(rawPath) {
-    if (!ghsLocalDirHandle) return null;
+    if (!ghsLocalDirName || !Object.keys(ghsLocalFileIndex).length) return null;
     const norm = ghsNormalizePath(rawPath);
     const key = norm.toLowerCase();
     let entry = ghsLocalFileIndex[key];
@@ -1043,40 +1077,62 @@
       }
     }
     if (!entry) return null;
-    try {
-      const file = await entry.handle.getFile();
-      return await file.text();
-    } catch (e) {
-      return `ERROR leyendo archivo local: ${e.message}`;
+    if (entry.content !== null && entry.content !== undefined) {
+      return entry.content;
     }
+    if (entry.file) {
+      try {
+        const txt = await entry.file.text();
+        entry.content = txt;
+        return txt;
+      } catch (e) {
+        return `ERROR leyendo archivo: ${e.message}`;
+      }
+    }
+    return null;
   }
 
   async function ghsWriteLocalFile(rawPath, content) {
-    if (!ghsLocalDirHandle) return false;
+    if (!ghsLocalDirName) return false;
     const norm = ghsNormalizePath(rawPath);
     if (!norm) return false;
     try {
-      const parts = norm.split("/").filter(Boolean);
-      let cur = ghsLocalDirHandle;
-      for (let i = 0; i < parts.length - 1; i++) {
-        cur = await cur.getDirectoryHandle(parts[i], { create: true });
-      }
-      const fname = parts[parts.length - 1];
-      const fhandle = await cur.getFileHandle(fname, { create: true });
-      const writable = await fhandle.createWritable();
-      await writable.write(content);
-      await writable.close();
-      await ghsIndexDirectory(ghsLocalDirHandle, "");
+      const key = norm.toLowerCase();
+      const fname = norm.split("/").pop();
+      ghsLocalFileIndex[key] = {
+        name: fname,
+        path: norm,
+        size: content.length,
+        lastModified: Date.now(),
+        content: content
+      };
+
+      // Auto-trigger download so the file is updated on disk
+      try {
+        const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = fname;
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(() => {
+          try {
+            document.body.removeChild(a);
+            URL.revokeObjectURL(a.href);
+          } catch (_) {}
+        }, 1500);
+      } catch (_) {}
+
       ghsUpdateFolderUI();
       return true;
     } catch (e) {
-      console.warn("[GHS FS] Write failed:", e);
+      console.warn("[GHS FS] Write error:", e);
       return false;
     }
   }
 
   function ghsListLocalFiles() {
-    if (!ghsLocalDirHandle) return "No hay ninguna carpeta vinculada en el navegador.";
+    if (!ghsLocalDirName || !Object.keys(ghsLocalFileIndex).length) return "No hay ninguna carpeta vinculada en el navegador.";
     const items = Object.values(ghsLocalFileIndex);
     const lines = items.map((i) => `  ${i.path.padEnd(35)} | ${(i.size / 1024).toFixed(1).padStart(7)} KB`);
     return (
@@ -1087,20 +1143,16 @@
     );
   }
 
-  // Auto-restore previous directory handle from IndexedDB
-  ghsLoadDirHandle().then(async (handle) => {
-    if (handle) {
-      try {
-        const perm = await handle.queryPermission({ mode: "readwrite" });
-        if (perm === "granted") {
-          ghsLocalDirHandle = handle;
-          ghsLocalDirName = handle.name || "Proyecto";
-          ghsLocalFileIndex = {};
-          await ghsIndexDirectory(handle, "");
-          ghsUpdateFolderUI();
-          console.log(`[GHS FS] Restored local workspace: ${ghsLocalDirName} (${Object.keys(ghsLocalFileIndex).length} files)`);
-        }
-      } catch (_) {}
+  // Auto-restore previous workspace from IndexedDB on page load
+  ghsLoadWorkspaceFromDB().then((saved) => {
+    if (saved && saved.folderName && saved.files && saved.files.length) {
+      ghsLocalDirName = saved.folderName;
+      ghsLocalFileIndex = {};
+      for (const f of saved.files) {
+        ghsLocalFileIndex[f.path.toLowerCase()] = f;
+      }
+      ghsUpdateFolderUI();
+      console.log(`[GHS FS] Auto-restored workspace from IndexedDB: ${ghsLocalDirName} (${saved.files.length} files)`);
     }
   });
 
@@ -1142,7 +1194,7 @@
     }
     const bareName = bareToolName(name);
     // ── BROWSER LOCAL WORKSPACE INTERCEPTOR (100% Nube sin puente local) ──
-    if (ghsLocalDirHandle) {
+    if (ghsLocalDirName && Object.keys(ghsLocalFileIndex).length) {
       const _bn = bareToolName(name);
 
       // 1. hermes_file_read
@@ -3317,16 +3369,9 @@ NO te detengas a explicar lo que vas a hacer ni esperes confirmación del usuari
 
             const folderBtn = root.querySelector("#zs-folder-btn");
       if (folderBtn) {
-        folderBtn.addEventListener("click", async (e) => {
+        folderBtn.addEventListener("click", (e) => {
           e.stopPropagation();
-          try {
-            const handle = await window.showDirectoryPicker({ mode: "readwrite" });
-            await ghsSetWorkspace(handle);
-          } catch (err) {
-            if (err.name !== "AbortError") {
-              console.warn("[GHS FS] Folder pick error:", err);
-            }
-          }
+          ghsPickLocalFolder();
         });
         ghsUpdateFolderUI();
       }
