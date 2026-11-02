@@ -3238,6 +3238,7 @@ NO te detengas a explicar lo que vas a hacer ni esperes confirmación del usuari
           <span id="zs-dot" class="off" title=""></span>
           <span id="zs-brand">GHS <span class="zs-free">v${EXT_VERSION}</span></span>
           <span id="zs-state"></span>
+          <button id="zs-mode-btn" class="zs-mode-btn zs-mode-local" title="Alternar entre PC Local (ws://127.0.0.1:17613) y Nube Render">💻 Local</button>
           <button id="zs-role-pill" class="zs-role-pill zs-role-standalone" title="Rol Enjambre: Click para alternar (Solo / Arquitecto / Obrero)">Solo</button>
           <button id="zs-folder-btn" class="zs-folder-btn" title="Vincular Carpeta de tu PC para que el Agente en la Nube trabaje en tus archivos">📁 Carpeta</button>
           <button id="zs-dashboard-btn" class="zs-dashboard-btn" title="Abrir Interfaz en pantalla grande (Superpoderes, Playbooks, Lotes y Logs)">Interfaz</button>
@@ -3344,8 +3345,12 @@ NO te detengas a explicar lo que vas a hacer ni esperes confirmación del usuari
         modeBtn.textContent = isLocal ? "💻 Local" : "☁️ Nube";
         modeBtn.className = "zs-mode-btn " + (isLocal ? "zs-mode-local" : "zs-mode-cloud");
         modeBtn.title = isLocal
-          ? "Conectado a tu PC Local (ws://127.0.0.1:17613). Clic para cambiar a Nube (Render)."
-          : "Conectado a Render Cloud (wss://ghs-cloud-backend.onrender.com). Clic para cambiar a tu PC Local.";
+          ? "MODO PC LOCAL ACTIVO: Poderes totales sobre todo tu disco C:\, PowerShell y programas. Clic para cambiar a Nube (Render)."
+          : "MODO NUBE ACTIVO: Ejecutándose en Render Cloud. Clic para cambiar a PC Local (superpoderes totales).";
+        const fBtn = root.querySelector("#zs-folder-btn");
+        if (fBtn) {
+          fBtn.style.display = isLocal ? "none" : "";
+        }
       }
       try {
         chrome.storage.local.get("zsMode", (r) => {
