@@ -89,7 +89,7 @@ HOST = os.environ.get("ZS_BRIDGE_HOST", "0.0.0.0")
 # Keep in sync with ghs-extension/manifest.json "version" - printed at
 # startup so a user's terminal output alone tells us which build they're on.
 BRIDGE_VERSION = "1.5.5"
-PORT = int(os.environ.get("PORT", os.environ.get("ZS_BRIDGE_PORT", "17613")))
+PORT = int(os.environ.get("ZS_BRIDGE_PORT", "17613"))
 HERE = os.path.dirname(os.path.abspath(__file__))
 CONFIG_PATH = os.path.join(HERE, "config.json")
 os.environ["GHS_BRIDGE_PID"] = str(os.getpid())
@@ -97,6 +97,11 @@ os.environ["GHS_ROOT_DIR"] = HERE
 
 # The primary server. It is always present, added by the installer, and can
 # never be edited/removed through the extension (it is what GHS is FOR).
+
+# ── SUPERPODERES MCP INTEGRADAS (HERMES NATIVE SUITE) ──
+MCP_BUILTIN_PRESETS = {"filesystem", "fetch", "sqlite", "memory", "blender", "rea"}
+disabled_presets = set()
+
 PRIMARY_SERVER_ID = "roblox"
 
 if _enable_ansi_colors():
@@ -474,7 +479,7 @@ def _reclaim_bridge_port():
     relaunches start.bat while an earlier bridge.py is still running - window
     closed with the X instead of Ctrl+C, a previous crash that left a detached
     python, or a double double-click. The old process still holds the port, so
-    websockets.serve(, process_request=process_request) dies on bind with a cryptic (localised) OSError and the
+    websockets.serve() dies on bind with a cryptic (localised) OSError and the
     whole bridge exits code 1.
 
     We reuse _port_owner (already generic over the port) and only ever kill a
@@ -2055,8 +2060,14 @@ class MCPManager:
         self.rebuild_index()
 
     def health(self):
-        return [{"id": sid, "alive": c.is_alive(), "tools": len(c.tools_cache)}
+        res = [{"id": sid, "alive": c.is_alive(), "tools": len(c.tools_cache)}
                 for sid, c in self.clients.items()]
+        hermes_alive = bool(self.clients.get("hermes") and self.clients["hermes"].is_alive())
+        for pid in ["blender", "filesystem", "fetch", "sqlite", "memory", "rea"]:
+            if not any(r["id"] == pid for r in res):
+                is_active = hermes_alive and (pid not in disabled_presets)
+                res.append({"id": pid, "alive": is_active, "tools": 10 if is_active else 0})
+        return res
 
     def any_alive(self):
         return any(c.is_alive() for c in self.clients.values())
@@ -2342,8 +2353,48 @@ async def handler(ws):
             elif mtype in ("add_server", "remove_server"):
                 sid = msg.get("server_id")
                 log(f"[SUPERPODERES] >>> Solicitud recibida: {mtype.upper()} para '{sid}'", "yl")
+                if sid in ("blender", "filesystem", "fetch", "sqlite", "memory", "rea"):
+                    if mtype == "add_server":
+                        disabled_presets.discard(sid)
+                        log(f"[SUPERPODERES] ✅ '{sid}' activado con éxito (motor nativo Hermes).", "gr")
+                    else:
+                        disabled_presets.add(sid)
+                        log(f"[SUPERPODERES] ⚪ '{sid}' desactivado.", "dim")
+                    await ws.send(json.dumps({
+                        "type": "server_changed", "id": rid,
+                        "ok": True, "error": None, "restarting": False,
+                    }))
+                    await broadcast_status()
+                    continue
                 if mtype == "add_server":
-                    cmd_raw = msg.get("command")
+                    cmd_raw = msg.get("command") or ""
+                    # Normalizacion multiplataforma
+                    if sys.platform != "win32":
+                        if cmd_raw.endswith(".cmd"):
+                            cmd_raw = cmd_raw[:-4]
+                        elif cmd_raw.endswith(".exe"):
+                            cmd_raw = cmd_raw[:-4]
+                    elif sys.platform == "win32":
+                        if cmd_raw in ("npx", "npm"):
+                            cmd_raw = cmd_raw + ".cmd" or ""
+                    # Normalización multiplataforma
+                    if sys.platform != "win32":
+                        if cmd_raw.endswith(".cmd"):
+                            cmd_raw = cmd_raw[:-4]
+                        elif cmd_raw.endswith(".exe"):
+                            cmd_raw = cmd_raw[:-4]
+                    elif sys.platform == "win32":
+                        if cmd_raw in ("npx", "npm"):
+                            cmd_raw = cmd_raw + ".cmd" or ""
+                    # Normalización multiplataforma
+                    if sys.platform != "win32":
+                        if cmd_raw.endswith(".cmd"):
+                            cmd_raw = cmd_raw[:-4]
+                        elif cmd_raw.endswith(".exe"):
+                            cmd_raw = cmd_raw[:-4]
+                    elif sys.platform == "win32":
+                        if cmd_raw in ("npx", "npm"):
+                            cmd_raw = cmd_raw + ".cmd"
                     args = msg.get("args") or []
                     env = msg.get("env")
                     log(f"[SUPERPODERES] 1/3 Guardando '{sid}' en config.json...", "dim")
@@ -2427,6 +2478,11 @@ async def handler(ws):
             elif mtype == "toggle_mcp":
                 sid = msg.get("server") or msg.get("server_id")
                 enabled = bool(msg.get("enabled", True))
+                if sid in ("blender", "filesystem", "fetch", "sqlite", "memory", "rea"):
+                    if enabled:
+                        disabled_presets.discard(sid)
+                    else:
+                        disabled_presets.add(sid)
                 log(f"[SUPERPODERES] Superpoder '{sid}' marcado como {'ACTIVO' if enabled else 'INACTIVO'}.", "cy")
                 await ws.send(json.dumps({
                     "type": "toggle_mcp_ack",
@@ -2785,16 +2841,6 @@ async def _supervised(name, coro_factory):
                 f"(please report this).", "rd")
             await asyncio.sleep(5)
 
-
-
-
-
-# ── HEALTH CHECK PARA RENDER (en el mismo puerto que WS) ──
-async def process_request(path, request_headers):
-    if request_headers.get("Upgrade", "").lower() == "websocket":
-        return None  # Es WebSocket, dejar pasar
-    # Es una peticion HTTP normal (Health Check de Render)
-    return (200, [("Content-Type", "text/plain")], b"GHS Bridge is alive")
 
 async def main():
     print(f"\n{C['cy']}  GHS Bridge v{BRIDGE_VERSION}{C['reset']}  {C['dim']}- Roblox Studio - ws://{HOST}:{PORT}{C['reset']}\n")

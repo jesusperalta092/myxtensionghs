@@ -1,17 +1,53 @@
 {
   "mcpServers": {
+    "roblox": {
+      "command": "launch_studio_mcp.py",
+      "args": []
+    },
+    "fetch": {
+      "command": "npx.cmd",
+      "args": [
+        "-y",
+        "mcp-fetch-server"
+      ]
+    },
+    "filesystem": {
+      "command": "npx.cmd",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "c:\\Users\\USER\\Downloads"
+      ]
+    },
+    "sqlite": {
+      "command": "npx.cmd",
+      "args": [
+        "-y",
+        "sqlite-mcp-server"
+      ]
+    },
     "hermes": {
       "command": "python",
       "args": [
         "hermes_mcp_server.py"
       ]
+    },
+    "figma": {
+      "command": "npx.cmd",
+      "args": [
+        "-y",
+        "figma-mcp"
+      ],
+      "env": {
+        "FIGMA_ACCESS_TOKEN": "YOUR_FIGMA_TOKEN_HERE"
+      }
     }
   },
   "security": {
-    "sandbox_dir": "/tmp/ghs_workspace",
+    "sandbox_dir": "c:\\Users\\USER\\Downloads",
     "allow_read": true,
     "allow_write": true,
     "allow_delete": false,
-    "allow_shell": false
+    "allow_shell": true
   }
 }

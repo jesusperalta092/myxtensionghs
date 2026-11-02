@@ -81,7 +81,7 @@
     ws.onopen = () => {
       statusDot.className = "status-dot";
       statusDot.style.background = "#10b981";
-      statusText.textContent = "● Puente Conectado: 127.0.0.1:17613";
+      statusText.textContent = "● Puente Conectado: " + (BRIDGE_WS_URL.indexOf("render") !== -1 ? "Nube (Render)" : "Local (127.0.0.1:17613)");
       appendLog("[WEBSOCKET] Conexión establecida con el puente local.");
       if (reconnectTimer) {
         clearInterval(reconnectTimer);
@@ -2374,7 +2374,7 @@ Por favor espera unos segundos mientras la IA razona y estructura el blueprint..
     const list = document.getElementById('projects-list');
     if (!list) return;
     list.innerHTML = '<div style="padding:20px;text-align:center;color:#8b8579;">Cargando...</div>';
-    const pyCode = "import os, json\nbase = r'C:\\Users\\USER\\Downloads'\nprojects = []\nfor d in os.listdir(base):\n    full = os.path.join(base, d)\n    if os.path.isdir(full) and not d.startswith('_') and d not in ['agent_workspace', 'GHS-Script-Free']:\n        projects.append({'name': d, 'path': full})\nprint(json.dumps(projects))";
+    const pyCode = "import os, json\nbase = os.path.join(os.path.expanduser('~'), 'Downloads')\nprojects = []\nfor d in os.listdir(base):\n    full = os.path.join(base, d)\n    if os.path.isdir(full) and not d.startswith('_') and d not in ['agent_workspace', 'GHS-Script-Free']:\n        projects.append({'name': d, 'path': full})\nprint(json.dumps(projects))";
     ws.send(JSON.stringify({
       type: "call_tool",
       id: "list_projects",
@@ -2447,7 +2447,7 @@ Por favor espera unos segundos mientras la IA razona y estructura el blueprint..
     // Puerto OK. Lanzar Cloudflare
     resultBox.innerHTML = '<div style="font-size:24px;margin-bottom:10px;">[WAIT]</div><div style="font-family:JetBrains Mono,monospace;font-size:12px;color:#8b8579;">Servidor en puerto ' + port + ' OK. Iniciando tunel...</div>';
     
-    ws.send(JSON.stringify({ type: "call_tool", id: "del_cf_txt", name: "hermes_terminal", arguments: { command: "del /f /q C:\\Users\\USER\\Downloads\\GHS-Script-Free\\cf_url.txt", is_daemon: false } }));
+    ws.send(JSON.stringify({ type: "call_tool", id: "del_cf_txt", name: "hermes_terminal", arguments: { command: "del /f /q cf_url.txt", is_daemon: false } }));
     
     const cmd = 'cd /d C:\\Users\\USER\\Downloads\\GHS-Script-Free && run_tunnel.bat ' + port;
     ws.send(JSON.stringify({ type: "call_tool", id: "run_tunnel_daemon", name: "hermes_terminal", arguments: { command: cmd, is_daemon: true } }));
@@ -2462,7 +2462,7 @@ Por favor espera unos segundos mientras la IA razona y estructura el blueprint..
             resultBox.innerHTML = '<div style="font-size:24px;margin-bottom:10px;">[ERR]</div><div style="font-size:12px;color:#ef4444;">Timeout en Cloudflare.</div>';
             return;
         }
-        ws.send(JSON.stringify({ type: "call_tool", id: "read_tunnel_url_poll", name: "hermes_file_read", arguments: { path: "C:\\Users\\USER\\Downloads\\GHS-Script-Free\\cf_url.txt" } }));
+        ws.send(JSON.stringify({ type: "call_tool", id: "read_tunnel_url_poll", name: "hermes_file_read", arguments: { path: "cf_url.txt" } }));
     }, 2000);
     
     window._cfPollInterval = pollInterval;
@@ -2777,9 +2777,9 @@ Por favor espera unos segundos mientras la IA razona y estructura el blueprint..
   // ── CEREBRO DEL AGENTE (MEMORIA 3 CAPAS) ──
   let _brainActiveFile = 'soul';
   const _brainPaths = {
-    soul: 'C:\\Users\\USER\\AppData\\Local\\hermes\\memory\\SOUL.md',
-    user: 'C:\\Users\\USER\\AppData\\Local\\hermes\\memory\\USER.md',
-    memory: 'C:\\Users\\USER\\AppData\\Local\\hermes\\memory\\MEMORY.md'
+    soul: 'memory/SOUL.md',
+    user: 'memory/USER.md',
+    memory: 'memory/MEMORY.md'
   };
   const _brainCache = { soul: '', user: '', memory: '' };
 

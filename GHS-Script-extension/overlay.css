@@ -1817,3 +1817,30 @@ html.zs-light .zs-operator-foot-txt {
 #zs-hermes-btn {
   display: none !important;
 }
+
+
+/* ── MODO SELECTOR: NUBE VS LOCAL ── */
+.zs-mode-btn {
+  background: linear-gradient(135deg, #059669, #10b981) !important;
+  color: #ffffff !important;
+  border: 1px solid rgba(255, 255, 255, 0.25) !important;
+  border-radius: 6px !important;
+  padding: 4px 9px !important;
+  font-size: 11px !important;
+  font-weight: 700 !important;
+  cursor: pointer !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 4px !important;
+  transition: all 0.2s ease !important;
+  box-shadow: 0 1px 4px rgba(16, 185, 129, 0.4) !important;
+}
+.zs-mode-btn.zs-mode-cloud {
+  background: linear-gradient(135deg, #2563eb, #3b82f6) !important;
+  box-shadow: 0 1px 4px rgba(37, 99, 235, 0.4) !important;
+}
+.zs-mode-btn:hover {
+  transform: translateY(-1px) !important;
+  filter: brightness(1.1) !important;
+}
+

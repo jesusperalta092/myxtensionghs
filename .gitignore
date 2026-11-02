@@ -1,86 +1,30 @@
-# Python
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-.venv/
-venv/
-*.egg-info/
-
-# Node
-node_modules/
-package-lock.json
-
-# Logs y temporales
-logs/
-*.log
-*.db
-*.sqlite
-
-# Backups
+# Local-only folders
+Compressed/
+Deprecated/
+ExtensionPresentation/
+presentation/
+docs/
 _backup_*/
-*.backup_*
-*.bak_*
-
-# Workspace
-agent_workspace/
-
-# Archivos reservados de Windows
-nul
-con
-prn
-aux
-
-# Scripts temporales
+bin/
+logs/
+devtools/
+*.log
+*.zip
+*.pyc
+__pycache__/
+.memkey
 fix_*.py
-prepare_render.py
-draw_logo_pil.py
+patch_*.py
+rebrand_*.py
+rename_*.py
+update_*.py
+icons_*.py
+generate_*.py
+draw_*.py
 final_cleanup.py
-rename_extension.py
-rebrand_logo.py
 hide_swarm_buttons.py
-update_popup.py
-icons_final.py
-fix_favicon.py
-generate_icon.py
-patch_projects.py
-parche_*.py
 
-# Archivos temporales
-cf_url.txt
-
-# ═══════════════════════════════════════════════════════════
-# HERMES-AGENT(MOD): Excluir TODO excepto tools/, agent/, model_tools.py, cli.py, run_agent.py, hermes_state*.py
-# ═══════════════════════════════════════════════════════════
-hermes-agent(mod)/*
-!hermes-agent(mod)/tools/
-!hermes-agent(mod)/tools/**
-!hermes-agent(mod)/agent/
-!hermes-agent(mod)/agent/**
-!hermes-agent(mod)/model_tools.py
-!hermes-agent(mod)/cli.py
-!hermes-agent(mod)/run_agent.py
-!hermes-agent(mod)/toolsets.py
-!hermes-agent(mod)/toolset_distributions.py
-!hermes-agent(mod)/hermes_state.py
-!hermes-agent(mod)/hermes_state_*.py
-!hermes-agent(mod)/hermes_constants.py
-!hermes-agent(mod)/hermes_logging.py
-!hermes-agent(mod)/hermes_time.py
-!hermes-agent(mod)/hermes_yaml.py
-!hermes-agent(mod)/utils.py
-!hermes-agent(mod)/skills/
-!hermes-agent(mod)/skills/**
-
-# Dentro de skills, solo el SKILL.md (no references, templates, assets)
-hermes-agent(mod)/skills/**/references/
-hermes-agent(mod)/skills/**/templates/
-hermes-agent(mod)/skills/**/assets/
-hermes-agent(mod)/skills/**/scripts/
-
-# Dentro de tools, excluir tests y cosas pesadas
-hermes-agent(mod)/tools/**/tests/
-hermes-agent(mod)/tools/**/*.md
-
-# Excluir tambien el directorio raro con comilla
-"hermes-agent(mod)/
+# System files
+.DS_Store
+Thumbs.db
+desktop.ini

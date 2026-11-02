@@ -83,11 +83,64 @@ if os.path.exists(MOD_DIR):
         sys.stderr.write(f"[hermes-mcp] Warning: Could not load native hermes-agent(mod): {e}\n")
         sys.stderr.flush()
 
-# SQLite Memory Setup
-MEMORY_DB_PATH = os.path.join(os.environ.get("LOCALAPPDATA", "."), "hermes", "ghs_memory.db")
+# ── RESOLUCION DINAMICA DE DIRECTORIOS HERMES (WINDOWS & LINUX/RENDER) ──
+def get_hermes_base_dir() -> str:
+    if sys.platform == "win32":
+        local_app = os.environ.get("LOCALAPPDATA")
+        if local_app:
+            return os.path.join(local_app, "hermes")
+        return os.path.join(os.environ.get("USERPROFILE", os.path.expanduser("~")), "AppData", "Local", "hermes")
+    else:
+        here = os.path.dirname(os.path.abspath(__file__))
+        if os.path.exists(os.path.join(here, "memory")):
+            return here
+        return os.path.join(os.path.expanduser("~"), ".hermes")
 
-# ── HABILITADOR DINAMICO DE SKILLS ──
-SKILLS_DIR = os.path.join(os.environ.get("LOCALAPPDATA", "."), "hermes", "skills")
+
+# ── CIFRADO / DESCIFRADO TRANSPARENTE DE MEMORIA (Fernet AES) ──
+GHS_DEFAULT_MEM_KEY = b'zF-6ZHe9Og1bnZjvo5tl_p7Lz8szWIyUfL0A3Pe7uUU='
+
+def get_fernet_cipher():
+    key_str = os.environ.get("GHS_MEM_KEY", "").strip()
+    key_path = os.path.join(os.path.dirname(__file__), '.memkey')
+    key = None
+    if key_str:
+        key = key_str.encode('utf-8')
+    elif os.path.exists(key_path):
+        try:
+            with open(key_path, 'rb') as kf:
+                key = kf.read().strip()
+        except Exception:
+            pass
+    if not key:
+        key = GHS_DEFAULT_MEM_KEY
+    from cryptography.fernet import Fernet
+    return Fernet(key)
+
+def decrypt_if_encrypted(data_bytes: bytes) -> str:
+    if data_bytes.startswith(b'gAAAAA'):
+        try:
+            cipher = get_fernet_cipher()
+            return cipher.decrypt(data_bytes).decode('utf-8')
+        except Exception as e:
+            return f"[Error desencriptando archivo de memoria: {e}]"
+    try:
+        return data_bytes.decode('utf-8')
+    except Exception:
+        return data_bytes.decode('utf-8', errors='replace')
+
+def get_memory_dir() -> str:
+    here = os.path.dirname(os.path.abspath(__file__))
+    proj_mem = os.path.join(here, "memory")
+    if os.path.exists(proj_mem):
+        return proj_mem
+    b = get_hermes_base_dir()
+    d = os.path.join(b, "memory")
+    os.makedirs(d, exist_ok=True)
+    return d
+
+MEMORY_DB_PATH = os.path.join(get_hermes_base_dir(), "ghs_memory.db")
+SKILLS_DIR = os.path.join(get_hermes_base_dir(), "skills")
 DISABLED_SKILLS_FILE = os.path.join(SKILLS_DIR, "disabled_skills.json")
 
 def get_disabled_skills():
@@ -1376,7 +1429,37 @@ def resolve_target_path(path: str) -> str:
     global GLOBAL_ACTIVE_WORKSPACE
     if not path:
         return ""
-    clean_path = os.path.normpath(path.strip())
+    raw = path.strip()
+    
+    # 1. Interceptor de Memoria 3 Capas (SOUL.md, USER.md, MEMORY.md)
+    bname = os.path.basename(raw.replace("\\", "/")).upper()
+    if bname in ("SOUL.MD", "USER.MD", "MEMORY.MD") or "HERMES/MEMORY" in raw.upper().replace("\\", "/"):
+        mdir = get_memory_dir()
+        target = os.path.join(mdir, os.path.basename(raw.replace("\\", "/")))
+        if not os.path.exists(target):
+            try:
+                os.makedirs(mdir, exist_ok=True)
+                with open(target, "w", encoding="utf-8") as f:
+                    f.write(f"# {bname}\n\nArchivo de memoria inicializado correctamente.\n")
+            except Exception:
+                pass
+        return target
+
+    # 2. Interceptor de ghs_project_state.json y agent_workspace
+    if "GHS_PROJECT_STATE.JSON" in raw.upper():
+        ws_dir = os.path.join(get_base_workspace(), "agent_workspace")
+        os.makedirs(ws_dir, exist_ok=True)
+        return os.path.join(ws_dir, "ghs_project_state.json")
+
+    # 3. Limpieza de rutas de Windows cuando corremos en Linux / Render
+    if sys.platform != "win32" and re.match(r'^[a-zA-Z]:[\\/]', raw):
+        m = re.search(r'[\\/]Downloads[\\/](.*)', raw, re.IGNORECASE)
+        if m:
+            clean_path = os.path.join(get_base_workspace(), m.group(1).replace("\\", "/"))
+        else:
+            clean_path = os.path.basename(raw.replace("\\", "/"))
+    else:
+        clean_path = os.path.normpath(raw)
     if os.path.isabs(clean_path):
         parent_dir = os.path.dirname(clean_path)
         cur = parent_dir
@@ -1938,16 +2021,20 @@ def _tool_file_read(arguments: Dict[str, Any]) -> Dict[str, Any]:
     limit = int(arguments.get("limit", 2000))
 
     try:
-        with open(path, "r", encoding="utf-8", errors="replace") as f:
-            lines = f.readlines()
+        with open(path, "rb") as f:
+            raw_bytes = f.read()
+        full_text = decrypt_if_encrypted(raw_bytes)
+        lines = full_text.splitlines(keepends=True)
         
         slice_lines = lines[offset: offset + limit]
         content = "".join(slice_lines)
+        sep = chr(10) + chr(10)
+        hdr = f"Archivo: {path} (Lineas {offset + 1} a {offset + len(slice_lines)} de {len(lines)})"
         return {
             "content": [
                 {
                     "type": "text",
-                    "text": f"Archivo: {path} (Líneas {offset + 1} a {offset + len(slice_lines)} de {len(lines)})\n\n{content}"
+                    "text": hdr + sep + content
                 }
             ]
         }
@@ -1973,8 +2060,16 @@ def _tool_file_write(arguments: Dict[str, Any]) -> Dict[str, Any]:
     target_path = resolve_target_path(raw_path)
     try:
         os.makedirs(os.path.dirname(target_path), exist_ok=True)
-        with open(target_path, "w", encoding="utf-8", errors="replace") as f:
-            f.write(content)
+        bname = os.path.basename(target_path).upper()
+        norm_path = target_path.replace(chr(92), "/").upper()
+        if bname in ("SOUL.MD", "USER.MD", "MEMORY.MD") or "MEMORY" in norm_path:
+            cipher = get_fernet_cipher()
+            enc_bytes = cipher.encrypt(content.encode("utf-8"))
+            with open(target_path, "wb") as f:
+                f.write(enc_bytes)
+        else:
+            with open(target_path, "w", encoding="utf-8", errors="replace") as f:
+                f.write(content)
         return {"content": [{"type": "text", "text": f"Archivo guardado exitosamente: {target_path} ({len(content)} bytes)."}]}
     except Exception as e:
         return {"content": [{"type": "text", "text": f"Error al escribir archivo en '{target_path}': {e}"}], "isError": True}
@@ -2103,23 +2198,29 @@ def _tool_memory(arguments: Dict[str, Any]) -> Dict[str, Any]:
     content = arguments.get("content", "")
     category = arguments.get("category", "general")
 
-    # ── MEMORIA UNIFICADA 3 CAPAS (SOUL.md + USER.md + MEMORY.md) ──
+                    # ── MEMORIA UNIFICADA 3 CAPAS (SOUL.md + USER.md + MEMORY.md) ──
     if action == "context":
-        mem_dir = os.path.join(os.environ.get("LOCALAPPDATA", "."), "hermes", "memory")
+        if os.name == 'nt':
+            mem_dir = os.environ.get("GHS_MEMORY_DIR", os.path.join(os.environ.get("LOCALAPPDATA", "."), "hermes", "memory"))
+        else:
+            cloud_mem = os.path.join(os.path.dirname(__file__), "memory")
+            mem_dir = os.environ.get("GHS_MEMORY_DIR", cloud_mem)
         parts = []
+        nl = chr(10)
+        dnl = chr(10) + chr(10)
         for fname in ["SOUL.md", "USER.md", "MEMORY.md"]:
             p = os.path.join(mem_dir, fname)
             if os.path.exists(p):
                 try:
-                    with open(p, "r", encoding="utf-8") as f:
-                        txt = f.read()
-                    parts.append(f"=== {fname} ===\n{txt}")
+                    with open(p, "rb") as f:
+                        raw_data = f.read()
+                    txt = decrypt_if_encrypted(raw_data)
+                    parts.append(f"=== {fname} ===" + nl + txt)
                 except Exception as e:
-                    parts.append(f"=== {fname} ===\n[error leyendo: {e}]")
+                    parts.append(f"=== {fname} ===" + nl + f"[error leyendo: {e}]")
             else:
-                parts.append(f"=== {fname} ===\n[no existe aún]")
-        return {"content": [{"type": "text", "text": "\n\n".join(parts)}]}
-
+                parts.append(f"=== {fname} ===" + nl + "[no existe aun]")
+        return {"content": [{"type": "text", "text": dnl.join(parts)}]}
     try:
         with sqlite3.connect(MEMORY_DB_PATH) as conn:
             cursor = conn.cursor()

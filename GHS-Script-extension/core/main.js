@@ -2998,6 +2998,43 @@ NO te detengas a explicar lo que vas a hacer ni esperes confirmación del usuari
 
       A.robloxMode = localStorage.getItem("zs_roblox_mode") === "true";
 
+            const modeBtn = root.querySelector("#zs-mode-btn");
+      function updateModeUI(mode) {
+        if (!modeBtn) return;
+        const isLocal = (mode === "local");
+        modeBtn.textContent = isLocal ? "💻 Local" : "☁️ Nube";
+        modeBtn.className = "zs-mode-btn " + (isLocal ? "zs-mode-local" : "zs-mode-cloud");
+        modeBtn.title = isLocal
+          ? "Conectado a tu PC Local (ws://127.0.0.1:17613). Clic para cambiar a Nube (Render)."
+          : "Conectado a Render Cloud (wss://ghs-cloud-backend.onrender.com). Clic para cambiar a tu PC Local.";
+      }
+      try {
+        chrome.storage.local.get("zsMode", (r) => {
+          const cur = (r && r.zsMode) || "local";
+          updateModeUI(cur);
+        });
+        chrome.storage.onChanged.addListener((changes, area) => {
+          if (area === "local" && changes.zsMode) {
+            updateModeUI(changes.zsMode.newValue);
+          }
+        });
+      } catch(e) {}
+      if (modeBtn) {
+        modeBtn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          try {
+            chrome.storage.local.get("zsMode", (r) => {
+              const cur = (r && r.zsMode) || "local";
+              const nextMode = (cur === "local") ? "cloud" : "local";
+              chrome.storage.local.set({ zsMode: nextMode }, () => {
+                updateModeUI(nextMode);
+                toast("Cambiado a Modo: " + (nextMode === "local" ? "💻 PC Local (127.0.0.1:17613)" : "☁️ Nube Render"));
+              });
+            });
+          } catch(err) { console.warn("Mode switch error:", err); }
+        });
+      }
+
       const dashBtn = root.querySelector("#zs-dashboard-btn");
       if (dashBtn) {
         dashBtn.addEventListener("click", (e) => {
@@ -3350,7 +3387,7 @@ NO te detengas a explicar lo que vas a hacer ni esperes confirmación del usuari
         { id: "hermes", name: "Hermes Agent OS", icon: "☤", tag: "Windows CUA", cmd: "python hermes_mcp_server.py", desc: "Automatización total de Windows: ratón, teclado, capturas de pantalla, terminal y memoria." },
         { id: "rea", name: "REA (Reverse Engineering)", icon: "🔬", tag: "Ingeniería Inversa", cmd: "npx.cmd -y rea-agents mcp", desc: "Descompilación de APKs, ingeniería inversa de apps Web/Electron y extracción de APIs." },
         { id: "blender", name: "Blender 3D", icon: "🎨", tag: "3D Studio", cmd: "blender_mcp\\mcp\\.venv\\Scripts\\blender-mcp.exe", desc: "Modelado 3D, cámaras, mallas y renderizado con Python en Blender." },
-        { id: "filesystem", name: "Filesystem PC", icon: "📁", tag: "Disco Local", cmd: "npx.cmd -y @modelcontextprotocol/server-filesystem c:\\Users\\USER\\Downloads", desc: "Acceso para leer, escribir y organizar archivos en tu carpeta Downloads." },
+        { id: "filesystem", name: "Filesystem PC", icon: "📁", tag: "Disco Local", cmd: "npx.cmd -y @modelcontextprotocol/server-filesystem Downloads", desc: "Acceso para leer, escribir y organizar archivos en tu carpeta Downloads." },
         { id: "fetch", name: "Web Fetch & Browser", icon: "🌐", tag: "Internet", cmd: "npx.cmd -y mcp-fetch-server", desc: "Navegar páginas web, descargar assets y consultar documentación online." },
         { id: "sqlite", name: "SQLite DB", icon: "🗄️", tag: "Base de Datos", cmd: "npx.cmd -y sqlite-mcp-server", desc: "Crear, consultar y administrar bases de datos SQL locales en tu máquina." },
         { id: "memory", name: "Memoria Persistente", icon: "🧠", tag: "Contexto", cmd: "npx.cmd -y @modelcontextprotocol/server-memory", desc: "Memoria contextual a largo plazo que la IA recuerda entre diferentes días." }
@@ -3381,7 +3418,7 @@ NO te detengas a explicar lo que vas a hacer ni esperes confirmación del usuari
       }
       const activeCount = mergedServers.filter((s) => s.alive).length;
       const sec = (A.bridge && A.bridge.security) || {
-        sandbox_dir: "c:\\Users\\USER\\Downloads",
+        sandbox_dir: "Downloads",
         allow_read: true,
         allow_write: true,
         allow_delete: false,

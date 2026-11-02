@@ -21,8 +21,34 @@ try {
   });
 } catch { }
 
+const DEFAULT_CLOUD_WS = "wss://ghs-cloud-backend.onrender.com";
+const DEFAULT_LOCAL_WS = "ws://127.0.0.1:17613";
+let bridgeWsCustom = null;
+
+try {
+  chrome.storage.local.get(["zsWsUrl", "zsMode"], (r) => {
+    if (r && r.zsWsUrl) bridgeWsCustom = r.zsWsUrl.trim();
+    if (r && r.zsMode === "local") bridgeWsCustom = DEFAULT_LOCAL_WS;
+    if (r && r.zsMode === "cloud") bridgeWsCustom = DEFAULT_CLOUD_WS;
+  });
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === "local") {
+      if (changes.zsWsUrl) bridgeWsCustom = (changes.zsWsUrl.newValue || "").trim();
+      if (changes.zsMode) {
+        bridgeWsCustom = changes.zsMode.newValue === "local" ? DEFAULT_LOCAL_WS : DEFAULT_CLOUD_WS;
+      }
+      if (ws) { try { ws.close(); } catch { } }
+    }
+  });
+} catch { }
+
 function getWsUrl() {
-  return `ws://${bridgeHost || "127.0.0.1"}:${PORT}`;
+  if (bridgeWsCustom && bridgeWsCustom.length > 5) {
+    return bridgeWsCustom;
+  }
+  return DEFAULT_LOCAL_WS;
+}
+:${PORT}`;
 }
 
 // Chat sites where a GHS provider content script runs. Status pushes go
@@ -346,7 +372,7 @@ const projectState = {
   sessionId: null,
   projectName: "",
   mission: "",
-  projectDir: "c:\\Users\\USER\\Downloads",
+  projectDir: "Downloads",
   status: "idle", // 'idle' | 'active' | 'quota_exhausted' | 'completed'
   currentTask: "",
   completedTasks: [],
@@ -380,14 +406,14 @@ async function syncStateLedgerToDisk() {
       type: "call_tool",
       name: "hermes_file_write",
       arguments: {
-        path: "c:\\Users\\USER\\Downloads\\agent_workspace\\ghs_project_state.json",
+        path: "agent_workspace/ghs_project_state.json",
         content: JSON.stringify(projectState, null, 2),
       },
     }, 15000);
   } catch (e) { }
 
   // Sincronizar copia interna del estado (.ghs_session.json) en la carpeta del proyecto en Windows
-  if (projectState.projectDir && projectState.projectDir !== "c:\\Users\\USER\\Downloads") {
+  if (projectState.projectDir && projectState.projectDir !== "Downloads") {
     try {
       const sep = projectState.projectDir.includes("/") ? "/" : "\\";
       const sessPath = `${projectState.projectDir}${sep}.ghs_session.json`;
@@ -1293,7 +1319,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
         projectState.sessionId = null;
         projectState.projectName = "";
         projectState.mission = "";
-        projectState.projectDir = "c:\\Users\\USER\\Downloads";
+        projectState.projectDir = "Downloads";
         projectState.status = "idle";
         projectState.currentTask = "";
         projectState.completedTasks = [];
