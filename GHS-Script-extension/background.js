@@ -48,8 +48,6 @@ function getWsUrl() {
   }
   return DEFAULT_LOCAL_WS;
 }
-:${PORT}`;
-}
 
 // Chat sites where a GHS provider content script runs. Status pushes go
 // to every tab matching these. Add the new provider's URL pattern here (and in

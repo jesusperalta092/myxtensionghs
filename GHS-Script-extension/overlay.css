@@ -1084,7 +1084,9 @@ html.zs-light .zs-tip-rbx { color: #374151; }
 .zs-roblox-btn,
 .zs-dashboard-btn,
 .zs-mcp-btn,
-.zs-rec-btn {
+.zs-rec-btn,
+.zs-mode-btn,
+.zs-folder-btn {
   all: unset;
   box-sizing: border-box;
   display: inline-flex;
@@ -1110,7 +1112,9 @@ html.zs-light .zs-tip-rbx { color: #374151; }
 .zs-roblox-btn:hover,
 .zs-dashboard-btn:hover,
 .zs-mcp-btn:hover,
-.zs-rec-btn:hover {
+.zs-rec-btn:hover,
+.zs-mode-btn:hover,
+.zs-folder-btn:hover {
   transform: translateY(-1px);
   filter: brightness(1.1);
 }
@@ -1118,7 +1122,9 @@ html.zs-light .zs-tip-rbx { color: #374151; }
 .zs-roblox-btn:active,
 .zs-dashboard-btn:active,
 .zs-mcp-btn:active,
-.zs-rec-btn:active {
+.zs-rec-btn:active,
+.zs-mode-btn:active,
+.zs-folder-btn:active {
   transform: translateY(0.5px);
   filter: brightness(0.95);
 }
@@ -1199,6 +1205,44 @@ html.zs-light .zs-tip-rbx { color: #374151; }
 @keyframes zs-rec-pulse {
   0%, 100% { opacity: 1; transform: scale(1); }
   50% { opacity: 0.85; transform: scale(0.96); }
+}
+
+/* Modo Button (Local: Emerald / Cloud: Royal Blue) */
+.zs-mode-btn,
+.zs-mode-btn.zs-mode-local {
+  background: linear-gradient(135deg, #059669, #10b981) !important;
+  color: #ffffff !important;
+  border: 1px solid rgba(255, 255, 255, 0.25) !important;
+  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.35) !important;
+}
+.zs-mode-btn:hover,
+.zs-mode-btn.zs-mode-local:hover {
+  box-shadow: 0 0 14px rgba(16, 185, 129, 0.6) !important;
+}
+.zs-mode-btn.zs-mode-cloud {
+  background: linear-gradient(135deg, #2563eb, #3b82f6) !important;
+  color: #ffffff !important;
+  border: 1px solid rgba(255, 255, 255, 0.25) !important;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.35) !important;
+}
+.zs-mode-btn.zs-mode-cloud:hover {
+  box-shadow: 0 0 14px rgba(37, 99, 235, 0.6) !important;
+}
+
+/* Folder Button (Sky Blue / Cyan Gradient) */
+.zs-folder-btn {
+  background: linear-gradient(135deg, #0284c7, #0ea5e9) !important;
+  color: #ffffff !important;
+  border: 1px solid rgba(255, 255, 255, 0.25) !important;
+  box-shadow: 0 2px 8px rgba(14, 165, 233, 0.35) !important;
+}
+.zs-folder-btn:hover {
+  box-shadow: 0 0 14px rgba(14, 165, 233, 0.6) !important;
+}
+.zs-folder-btn.zs-folder-active {
+  background: linear-gradient(135deg, #059669, #10b981) !important;
+  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.45) !important;
+  border-color: rgba(255, 255, 255, 0.5) !important;
 }
 
 /* ═══════════ MODAL POPOVER (#zs-menu) ═══════════ */
