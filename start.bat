@@ -98,11 +98,17 @@ if errorlevel 1 (
     pause
     exit /b 1
 )
-echo         Not found. Installing via winget...
-echo.
-winget install --id Python.Python.3.12 --source winget --accept-package-agreements --accept-source-agreements
-if errorlevel 1 call :log "winget install returned an error (see console output above)."
-echo.
+echo         Not found. Auto-instalando Python silenciosamente...
+call :log "Python not found. Starting silent auto-installation..."
+where winget >nul 2>nul
+if not errorlevel 1 (
+    winget install --id Python.Python.3.12 --source winget --silent --accept-package-agreements --accept-source-agreements
+) else (
+    echo         Winget no disponible, descargando instalador oficial via PowerShell...
+    call :log "Winget missing, fallback to PowerShell direct installer..."
+    powershell -NoProfile -ExecutionPolicy Bypass -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; $installer = Join-Path $env:TEMP 'python_setup.exe'; (New-Object System.Net.WebClient).DownloadFile('https://www.python.org/ftp/python/3.12.7/python-3.12.7-amd64.exe', $installer); Start-Process -FilePath $installer -ArgumentList '/passive InstallAllUsers=1 PrependPath=1' -Wait"
+)
+call :log "Auto-install finished, rescanning Python..."
 echo   Checking again...
 set "PY=py -3"
 call :validate_py && goto :ready
@@ -146,7 +152,7 @@ echo   [2/4] Checking Python libraries (websockets, requests, pyautogui, mss, pl
 %PY% -c "import websockets, requests, pyautogui, mss, playwright" >nul 2>nul
 if errorlevel 1 (
     echo         Installing core agent libraries ^(first time only^)...
-    %PY% -m pip install --user websockets requests youtube-transcript-api yt-dlp pyautogui mss playwright
+    %PY% -m pip install --user --quiet websockets requests youtube-transcript-api yt-dlp pyautogui mss playwright
     if errorlevel 1 (
         echo.
         echo   WARNING: Some extra libraries could not be installed automatically.
