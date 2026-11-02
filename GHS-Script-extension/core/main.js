@@ -1048,13 +1048,21 @@
       if (!btn) return;
       if (ghsLocalDirName && Object.keys(ghsLocalFileIndex).length) {
         const count = Object.keys(ghsLocalFileIndex).length;
-        btn.textContent = `📁 ${ghsLocalDirName.slice(0, 14)} (${count})`;
+        btn.innerHTML = `<span id="zs-folder-name">📁 ${ghsLocalDirName.slice(0, 14)} (${count})</span> <span id="zs-folder-clear" title="Desvincular y quitar esta carpeta" style="margin-left:6px; padding:1px 5px; background:rgba(0,0,0,0.3); border-radius:4px; font-weight:bold; cursor:pointer; color:#fff;">✕</span>`;
         btn.classList.add("zs-folder-active");
-        btn.title = `Carpeta vinculada: ${ghsLocalDirName} (${count} archivos listos). Clic para cambiar de carpeta.`;
+        btn.title = `Carpeta vinculada: ${ghsLocalDirName} (${count} archivos). Clic en el texto para cambiar de carpeta, o en [✕] para desvincularla.`;
+        const clearBtn = btn.querySelector("#zs-folder-clear");
+        if (clearBtn) {
+          clearBtn.onclick = (e) => {
+            e.stopPropagation();
+            ghsClearWorkspace();
+            toast("Carpeta desvinculada con éxito.");
+          };
+        }
       } else {
-        btn.textContent = "📁 Carpeta";
+        btn.innerHTML = "📁 Vincular Carpeta";
         btn.classList.remove("zs-folder-active");
-        btn.title = "Vincular Carpeta de tu PC para que el Agente en la Nube trabaje en tus archivos locales";
+        btn.title = "Vincular Carpeta (o tu carpeta Downloads) para que el Agente en la Nube trabaje en tus proyectos";
       }
     } catch (_) {}
   }
@@ -3369,6 +3377,9 @@ NO te detengas a explicar lo que vas a hacer ni esperes confirmación del usuari
             const folderBtn = root.querySelector("#zs-folder-btn");
       if (folderBtn) {
         folderBtn.addEventListener("click", (e) => {
+          if (e.target && e.target.id === "zs-folder-clear") {
+            return;
+          }
           e.stopPropagation();
           ghsPickLocalFolder();
         });
