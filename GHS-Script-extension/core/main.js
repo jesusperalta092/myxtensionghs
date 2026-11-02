@@ -1376,7 +1376,7 @@
     // if the model explicitly asks via {"server": "<id>"} (see list_mcp_servers).
     if (name === "list_commands" || name === "list_tools") {
       await ensureTools();
-      const requested = (args.server || "roblox").trim();
+      const requested = (args.server || (A.robloxMode ? "roblox" : "all")).trim();
       // The MCP proxy keeps advertising Roblox's catalogue even with no Studio
       // attached, so list_commands would hand back the full command list and read
       // as "Roblox is fine" - then every command silently fails. When Roblox is
@@ -4120,7 +4120,7 @@ NO te detengas a explicar lo que vas a hacer ni esperes confirmación del usuari
       else if (A.starting) {
         toneClass = "starting";
         indicator = `<span class="zs-spin"></span>`;
-        msg = `Starting the Roblox agent…`;
+        msg = A.robloxMode ? `Iniciando agente de Roblox…` : `Iniciando Agente Autónomo…`;
         label = "Starting…"; kind = "starting"; disabled = true;
       } else if (A.started) {
         // Prefer the ADVERTISED list length (A.toolList - the AGGREGATE catalogue
@@ -4196,7 +4196,7 @@ NO te detengas a explicar lo que vas a hacer ni esperes confirmación del usuari
             ? `Enjambre: Diseñador UI con Ojos listo para auditar visualmente.`
             : (addonOk && !bridgeOk)
             ? `Agente Autónomo Listo (Herramientas activas)`
-            : `Standby. Start the agent, or just chat.`;
+            : (A.robloxMode ? `Standby. Inicia el agente de Roblox, o simplemente chatea.` : `Standby. Inicia el Agente Autónomo, o escribe tu meta.`);
           label = A.role === "all_in_one"
             ? "▶︎ Iniciar Mono-Pestaña"
             : A.role === "architect"
@@ -4207,7 +4207,7 @@ NO te detengas a explicar lo que vas a hacer ni esperes confirmación del usuari
             ? "▶︎ Iniciar Diseñador UI"
             : (addonOk && !bridgeOk)
             ? "▶︎ Iniciar Agente Autónomo"
-            : "▶︎ Start Roblox agent";
+            : (A.robloxMode ? "▶︎ Iniciar Agente Roblox" : "▶︎ Iniciar Agente Autónomo");
           kind = "start";
         } else if (addonOk) {
           // El puente local y el agente universal están conectados con sus herramientas
@@ -4228,17 +4228,19 @@ NO te detengas a explicar lo que vas a hacer ni esperes confirmación del usuari
           kind = "start";
         } else {
           toneClass = "warn"; warn = true;
-          msg = !A.bridge.connected
-            ? `Run <b>start.bat</b> on your PC.`
-            : placeDown
-              ? `Open a <b>place</b> in Roblox Studio.`
+          if (!A.bridge.connected) {
+            msg = `Ejecuta <b>start.bat</b> en tu PC o usa Modo Nube.`;
+          } else if (A.robloxMode) {
+            msg = placeDown
+              ? `Abre un <b>lugar</b> en Roblox Studio.`
               : (appDown || studioDown) && studioProcUp
-                ? `Studio is open but not connected - open <b>Assistant Settings &gt; MCP Servers</b> in Studio.`
-                : appDown
-                  ? `Open <b>Roblox Studio</b> &amp; enable its MCP server.`
-                  : studioDown
-                    ? `Open <b>Roblox Studio</b> &amp; enable its MCP server.`
-                    : `Open <b>Roblox Studio</b> for the tools.`;
+                ? `Studio está abierto pero no conectado - abre <b>Assistant Settings &gt; MCP Servers</b> en Studio.`
+                : `Abre <b>Roblox Studio</b> para usar sus herramientas Luau.`;
+          } else {
+            toneClass = "active";
+            warn = false;
+            msg = `<b>Agente Autónomo Listo</b> (${A.toolList.length || (A.bridge && A.bridge.tools) || 0} herramientas disponibles)`;
+          }
           label = A.role === "all_in_one"
             ? "▶︎ Iniciar Mono-Pestaña"
             : A.role === "architect"
@@ -4247,7 +4249,7 @@ NO te detengas a explicar lo que vas a hacer ni esperes confirmación del usuari
             ? "▶︎ Iniciar Obrero"
             : A.role === "ui_designer"
             ? "▶︎ Iniciar Diseñador UI"
-            : "▶︎ Start Roblox agent";
+            : (A.robloxMode ? "▶︎ Iniciar Agente Roblox" : "▶︎ Iniciar Agente Autónomo");
           kind = "start";
         }
         disabled = (!bridgeOk && !addonOk) && (A.role !== "architect" && A.role !== "all_in_one");
@@ -4470,7 +4472,7 @@ NO te detengas a explicar lo que vas a hacer ni esperes confirmación del usuari
       if (A.started || !P.isFreshChat()) return;
       if (!nudged) {
         nudged = true;
-        toast("Tip: click “▶︎ Start Roblox agent” to let the AI control Roblox Studio.");
+        toast(A.robloxMode ? "Tip: haz clic en “▶︎ Iniciar Agente Roblox” para controlar Roblox Studio." : "Tip: haz clic en “▶︎ Iniciar Agente Autónomo” para comenzar la misión.");
       }
       if (!actionBtn) return;
       actionBtn.classList.add("zs-flash");

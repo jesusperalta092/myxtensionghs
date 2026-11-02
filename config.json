@@ -1,9 +1,5 @@
 {
   "mcpServers": {
-    "roblox": {
-      "command": "launch_studio_mcp.py",
-      "args": []
-    },
     "fetch": {
       "command": "npx.cmd",
       "args": [
