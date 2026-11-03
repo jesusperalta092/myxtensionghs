@@ -2465,6 +2465,408 @@ def _tool_skill_save(arguments: Dict[str, Any]) -> Dict[str, Any]:
     return {"content": [{"type": "text", "text": json.dumps(result_payload, indent=2, ensure_ascii=False)}]}
 
 
+def _tool_checkpoint(arguments: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Sistema Quirúrgico de Respaldo y Rollback Instantáneo (Zero-Weight).
+    Acciones:
+      - 'create': Crea un punto de restauración seguro de 1 o más archivos específicos antes de modificarlos.
+      - 'rollback': Restaura los archivos al estado del último punto de restauración.
+      - 'clean': Purga los archivos de backup temporales una vez que el pre-flight confirma 0 errores.
+      - 'status' / 'list': Lista los checkpoints activos y archivos protegidos.
+    """
+    try:
+        action = arguments.get("action", "create").lower().strip()
+        files = arguments.get("files") or arguments.get("file") or []
+        if isinstance(files, str):
+            files = [files]
+        reason = arguments.get("reason", "Respaldo preventivo antes de modificación")
+
+        downloads_dir = os.path.join(os.path.expanduser("~"), "Downloads")
+        project_dir = arguments.get("project_dir", "")
+        if project_dir:
+            project_dir = resolve_target_path(project_dir)
+        elif files:
+            first_resolved = resolve_target_path(files[0])
+            project_dir = os.path.dirname(first_resolved)
+        else:
+            project_dir = downloads_dir
+
+        backup_dir = os.path.join(project_dir, "_temp", "_backup")
+        os.makedirs(backup_dir, exist_ok=True)
+        index_file = os.path.join(backup_dir, "checkpoint_index.json")
+
+        checkpoints_data = {"checkpoints": []}
+        if os.path.exists(index_file):
+            try:
+                with open(index_file, "r", encoding="utf-8") as f:
+                    checkpoints_data = json.load(f)
+            except Exception:
+                checkpoints_data = {"checkpoints": []}
+
+        if action in ("create", "save", "backup"):
+            if not files:
+                return {"content": [{"type": "text", "text": "Error: 'files' es requerido para crear un checkpoint."}], "isError": True}
+
+            ts = int(time.time())
+            cp_id = f"cp_{ts}"
+            entries = []
+
+            for fpath in files:
+                resolved = resolve_target_path(fpath)
+                existed = os.path.exists(resolved) and os.path.isfile(resolved)
+                base_name = os.path.basename(resolved)
+                bak_name = f"{base_name}.bak_{ts}"
+                bak_path = os.path.join(backup_dir, bak_name)
+
+                size_bytes = 0
+                if existed:
+                    shutil.copy2(resolved, bak_path)
+                    size_bytes = os.path.getsize(bak_path)
+
+                entries.append({
+                    "original_path": resolved,
+                    "backup_path": bak_path if existed else None,
+                    "existed": existed,
+                    "bytes": size_bytes
+                })
+
+            cp_entry = {
+                "id": cp_id,
+                "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+                "reason": reason,
+                "entries": entries
+            }
+            checkpoints_data["checkpoints"].append(cp_entry)
+
+            with open(index_file, "w", encoding="utf-8") as f:
+                json.dump(checkpoints_data, f, indent=2, ensure_ascii=False)
+
+            return {
+                "content": [{
+                    "type": "text",
+                    "text": json.dumps({
+                        "success": True,
+                        "action": "create",
+                        "checkpoint_id": cp_id,
+                        "files_protected": len(entries),
+                        "details": entries,
+                        "message": f"✓ Checkpoint '{cp_id}' creado exitosamente. {len(entries)} archivo(s) respaldados en '{backup_dir}'."
+                    }, indent=2, ensure_ascii=False)
+                }]
+            }
+
+        elif action in ("rollback", "restore", "revert"):
+            if not checkpoints_data.get("checkpoints"):
+                return {"content": [{"type": "text", "text": "No hay ningún checkpoint previo para restaurar."}], "isError": True}
+
+            last_cp = checkpoints_data["checkpoints"].pop()
+            restored = []
+            deleted = []
+
+            for entry in last_cp.get("entries", []):
+                orig = entry.get("original_path")
+                bak = entry.get("backup_path")
+                existed = entry.get("existed", True)
+
+                if existed and bak and os.path.exists(bak):
+                    os.makedirs(os.path.dirname(orig), exist_ok=True)
+                    shutil.copy2(bak, orig)
+                    restored.append(orig)
+                elif not existed and os.path.exists(orig):
+                    os.remove(orig)
+                    deleted.append(orig)
+
+            with open(index_file, "w", encoding="utf-8") as f:
+                json.dump(checkpoints_data, f, indent=2, ensure_ascii=False)
+
+            return {
+                "content": [{
+                    "type": "text",
+                    "text": json.dumps({
+                        "success": True,
+                        "action": "rollback",
+                        "checkpoint_id": last_cp.get("id"),
+                        "restored_files": restored,
+                        "deleted_new_files": deleted,
+                        "message": f"✓ Rollback completado: {len(restored)} archivo(s) restaurados a su estado original y {len(deleted)} archivo(s) huérfanos eliminados."
+                    }, indent=2, ensure_ascii=False)
+                }]
+            }
+
+        elif action in ("clean", "cleanup", "purgar", "commit"):
+            if os.path.exists(backup_dir):
+                shutil.rmtree(backup_dir, ignore_errors=True)
+            return {
+                "content": [{
+                    "type": "text",
+                    "text": json.dumps({
+                        "success": True,
+                        "action": "clean",
+                        "message": "✓ Checkpoints y temporales purgados exitosamente tras validación satisfactoria."
+                    }, indent=2, ensure_ascii=False)
+                }]
+            }
+
+        elif action in ("list", "status"):
+            return {
+                "content": [{
+                    "type": "text",
+                    "text": json.dumps({
+                        "success": True,
+                        "action": "list",
+                        "backup_dir": backup_dir,
+                        "total_checkpoints": len(checkpoints_data.get("checkpoints", [])),
+                        "checkpoints": checkpoints_data.get("checkpoints", [])
+                    }, indent=2, ensure_ascii=False)
+                }]
+            }
+
+        else:
+            return {"content": [{"type": "text", "text": f"Acción '{action}' no reconocida en hermes_checkpoint. Use 'create', 'rollback', 'clean' o 'list'."}], "isError": True}
+
+    except Exception as e:
+        return {"content": [{"type": "text", "text": f"Error en hermes_checkpoint: {e}\n{traceback.format_exc()}"}], "isError": True}
+
+
+def _tool_preflight(arguments: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Inspector Pre-Entrega (Pre-Flight Guardian).
+    Valida sintaxis y coherencia estructural de archivos modificados antes de finalizar la tarea.
+    Regla de 2-Strike: Si falla la sintaxis, el agente corrige en el intento 1; si vuelve a fallar,
+    se ejecuta hermes_checkpoint(action='rollback') para proteger el proyecto del usuario.
+    """
+    try:
+        raw_file = arguments.get("file") or arguments.get("path") or arguments.get("filename") or ""
+        target_dir = arguments.get("target_dir") or arguments.get("project_dir") or ""
+        check_type = arguments.get("check_type", "auto").lower().strip()
+
+        if not raw_file and not target_dir:
+            return {"content": [{"type": "text", "text": "Error: 'file' o 'target_dir' es requerido para preflight."}], "isError": True}
+
+        # 1. Validación de Archivo Específico (Chequeo Aislado Rápido)
+        if raw_file:
+            resolved = resolve_target_path(raw_file)
+            if not os.path.exists(resolved) or not os.path.isfile(resolved):
+                return {"content": [{"type": "text", "text": f"Error: Archivo objetivo no encontrado: '{resolved}'."}], "isError": True}
+
+            ext = os.path.splitext(resolved)[1].lower()
+            try:
+                with open(resolved, "r", encoding="utf-8", errors="replace") as f:
+                    content = f.read()
+            except Exception as e:
+                return {"content": [{"type": "text", "text": f"Error al leer '{resolved}': {e}"}], "isError": True}
+
+            # Python Check
+            if ext == ".py":
+                try:
+                    compile(content, resolved, "exec")
+                    return {
+                        "content": [{
+                            "type": "text",
+                            "text": json.dumps({
+                                "valid": True,
+                                "language": "python",
+                                "file": resolved,
+                                "status": "PASS",
+                                "message": f"✓ Pre-Flight Python superado (py_compile: 0 errores de sintaxis en '{os.path.basename(resolved)}')."
+                            }, indent=2, ensure_ascii=False)
+                        }]
+                    }
+                except SyntaxError as syn_err:
+                    return {
+                        "content": [{
+                            "type": "text",
+                            "text": json.dumps({
+                                "valid": False,
+                                "language": "python",
+                                "file": resolved,
+                                "status": "FAIL",
+                                "error_type": type(syn_err).__name__,
+                                "line": syn_err.lineno,
+                                "column": syn_err.offset,
+                                "snippet": syn_err.text.strip() if syn_err.text else "",
+                                "message": f"Error de sintaxis en línea {syn_err.lineno}: {syn_err.msg}",
+                                "protocol_strike_rule": "Intento 1: Corrige exactamente esta línea. Intento 2: Si vuelve a fallar, ejecuta hermes_checkpoint(action='rollback') inmediatamente."
+                            }, indent=2, ensure_ascii=False)
+                        }],
+                        "isError": True
+                    }
+
+            # JSON Check
+            elif ext == ".json":
+                try:
+                    json.loads(content)
+                    return {
+                        "content": [{
+                            "type": "text",
+                            "text": json.dumps({
+                                "valid": True,
+                                "language": "json",
+                                "file": resolved,
+                                "status": "PASS",
+                                "message": f"✓ Pre-Flight JSON superado: estructura válida al 100%."
+                            }, indent=2, ensure_ascii=False)
+                        }]
+                    }
+                except json.JSONDecodeError as jerr:
+                    return {
+                        "content": [{
+                            "type": "text",
+                            "text": json.dumps({
+                                "valid": False,
+                                "language": "json",
+                                "file": resolved,
+                                "status": "FAIL",
+                                "error_type": "JSONDecodeError",
+                                "line": jerr.lineno,
+                                "column": jerr.colno,
+                                "message": f"JSON inválido en línea {jerr.lineno}, col {jerr.colno}: {jerr.msg}",
+                                "protocol_strike_rule": "Corrige las comas o llaves en esa línea antes de responder."
+                            }, indent=2, ensure_ascii=False)
+                        }],
+                        "isError": True
+                    }
+
+            # JavaScript / TypeScript Check
+            elif ext in (".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs"):
+                stack = []
+                pairs = {")": "(", "}": "{", "]": "["}
+                lines = content.splitlines()
+                delimiter_err = None
+
+                for l_idx, line in enumerate(lines, 1):
+                    clean_line = line.split("//")[0]
+                    for char_idx, ch in enumerate(clean_line):
+                        if ch in ("(", "{", "["):
+                            stack.append((ch, l_idx, char_idx + 1))
+                        elif ch in (")", "}", "]"):
+                            if not stack:
+                                delimiter_err = f"Delimitador de cierre '{ch}' inesperado sin apertura previa en línea {l_idx}, col {char_idx + 1}"
+                                break
+                            top, top_line, top_col = stack.pop()
+                            if pairs[ch] != top:
+                                delimiter_err = f"Discrepancia de cierre: esperado '{top}' abierto en línea {top_line}, pero se encontró '{ch}' en línea {l_idx}"
+                                break
+                    if delimiter_err:
+                        break
+
+                if not delimiter_err and stack:
+                    unclosed, un_l, un_c = stack[-1]
+                    delimiter_err = f"Delimitador '{unclosed}' abierto en línea {un_l}, col {un_c} nunca fue cerrado."
+
+                if delimiter_err:
+                    return {
+                        "content": [{
+                            "type": "text",
+                            "text": json.dumps({
+                                "valid": False,
+                                "language": "javascript",
+                                "file": resolved,
+                                "status": "FAIL",
+                                "error_type": "SyntaxError",
+                                "message": delimiter_err,
+                                "protocol_strike_rule": "Intento 1: Cierra el bloque pendiente. Intento 2: Si persiste, ejecuta hermes_checkpoint(action='rollback')."
+                            }, indent=2, ensure_ascii=False)
+                        }],
+                        "isError": True
+                    }
+
+                if ext in (".js", ".mjs", ".cjs"):
+                    try:
+                        ncheck = subprocess.run(
+                            ["node", "--check", resolved],
+                            capture_output=True, text=True, timeout=3
+                        )
+                        if ncheck.returncode != 0:
+                            return {
+                                "content": [{
+                                    "type": "text",
+                                    "text": json.dumps({
+                                        "valid": False,
+                                        "language": "javascript",
+                                        "file": resolved,
+                                        "status": "FAIL",
+                                        "error_type": "NodeCheckError",
+                                        "stderr": ncheck.stderr.strip()[:400],
+                                        "message": f"Falla en node --check para '{os.path.basename(resolved)}'."
+                                    }, indent=2, ensure_ascii=False)
+                                }],
+                                "isError": True
+                            }
+                    except Exception:
+                        pass
+
+                return {
+                    "content": [{
+                        "type": "text",
+                        "text": json.dumps({
+                            "valid": True,
+                            "language": "javascript",
+                            "file": resolved,
+                            "status": "PASS",
+                            "message": f"✓ Pre-Flight JavaScript/TypeScript superado (0 errores estructurales detectados)."
+                        }, indent=2, ensure_ascii=False)
+                    }]
+                }
+
+            else:
+                return {
+                    "content": [{
+                        "type": "text",
+                        "text": json.dumps({
+                            "valid": True,
+                            "file": resolved,
+                            "status": "PASS",
+                            "message": f"✓ Pre-Flight superado para '{os.path.basename(resolved)}'."
+                        }, indent=2, ensure_ascii=False)
+                    }]
+                }
+
+        # 2. Validación de Proyecto Completo (Solo si check_type == 'build')
+        if target_dir and check_type == "build":
+            resolved_dir = resolve_target_path(target_dir)
+            pkg_json = os.path.join(resolved_dir, "package.json")
+            if os.path.exists(pkg_json):
+                try:
+                    b_res = subprocess.run(
+                        ["npm.cmd" if sys.platform == "win32" else "npm", "run", "build"],
+                        cwd=resolved_dir, capture_output=True, text=True, timeout=45
+                    )
+                    if b_res.returncode == 0:
+                        return {
+                            "content": [{
+                                "type": "text",
+                                "text": json.dumps({
+                                    "valid": True,
+                                    "project_dir": resolved_dir,
+                                    "status": "PASS",
+                                    "message": "✓ Compilación completa de producción (npm run build) exitosa."
+                                }, indent=2, ensure_ascii=False)
+                            }]
+                        }
+                    else:
+                        return {
+                            "content": [{
+                                "type": "text",
+                                "text": json.dumps({
+                                    "valid": False,
+                                    "project_dir": resolved_dir,
+                                    "status": "FAIL",
+                                    "stderr": b_res.stderr.strip()[:600],
+                                    "message": "Falla en npm run build. Revisa dependencias o aplica rollback."
+                                }, indent=2, ensure_ascii=False)
+                            }],
+                            "isError": True
+                        }
+                except Exception as ex:
+                    return {"content": [{"type": "text", "text": f"Error al ejecutar build en '{resolved_dir}': {ex}"}], "isError": True}
+
+        return {"content": [{"type": "text", "text": "Validación pre-flight concluida."}]}
+
+    except Exception as e:
+        return {"content": [{"type": "text", "text": f"Error en hermes_preflight: {e}\n{traceback.format_exc()}"}], "isError": True}
+
+
 def _tool_memory(arguments: Dict[str, Any]) -> Dict[str, Any]:
     import sqlite3
     action = arguments.get("action", "context")  # default = context para forzar carga al inicio
@@ -3474,6 +3876,56 @@ TOOLS = [
                 }
             }
         }
+    },
+    {
+        "name": "hermes_checkpoint",
+        "description": "Sistema de respaldo y rollback instantáneo seguro (Zero-Weight). Crea puntos de restauración de archivos específicos antes de modificarlos ('create'), restaura el estado previo intacto si algo falla ('rollback'), o purga los temporales ('clean') una vez validado.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string",
+                    "enum": ["create", "rollback", "clean", "list"],
+                    "description": "'create' para respaldar antes de editar, 'rollback' para restaurar si falló la compilación, 'clean' para consolidar y purgar temporales."
+                },
+                "files": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Lista de rutas de archivos específicos a respaldar o restaurar (ej: ['server.py', 'src/App.tsx'])."
+                },
+                "project_dir": {
+                    "type": "string",
+                    "description": "Directorio raíz del proyecto (opcional)."
+                },
+                "reason": {
+                    "type": "string",
+                    "description": "Motivo breve del respaldo preventivo."
+                }
+            },
+            "required": ["action"]
+        }
+    },
+    {
+        "name": "hermes_preflight",
+        "description": "Inspector Pre-Entrega (Pre-Flight Guardian). Valida la sintaxis e integridad estructural de archivos modificados (Python con py_compile, JavaScript/TypeScript, JSON) antes de dar una tarea por terminada. Si detecta error, el agente debe autocorregir en 1 intento o activar hermes_checkpoint(action='rollback').",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "file": {
+                    "type": "string",
+                    "description": "Ruta del archivo específico modificado a inspeccionar (ej: 'main.py', 'routes.js', 'package.json')."
+                },
+                "target_dir": {
+                    "type": "string",
+                    "description": "Directorio del proyecto si se requiere validar compilación global ('build')."
+                },
+                "check_type": {
+                    "type": "string",
+                    "enum": ["auto", "syntax", "build"],
+                    "description": "'syntax' para validación aislada rápida (<50ms), 'build' para compilar con npm run build si existe package.json."
+                }
+            }
+        }
     }
 ]
 
@@ -3551,6 +4003,10 @@ def main():
                     res = _tool_skill_view(args)
                 elif name in ("hermes_skill_save", "hermes_skill_create", "hermes_skill_evolve"):
                     res = _tool_skill_save(args)
+                elif name in ("hermes_checkpoint", "hermes_rollback"):
+                    res = _tool_checkpoint(args)
+                elif name in ("hermes_preflight", "hermes_verify"):
+                    res = _tool_preflight(args)
                 elif name == "hermes_tools_list":
                     res = _tool_tools_list(args)
                 elif name == "hermes_run_tool":

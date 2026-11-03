@@ -22,9 +22,9 @@ const ZS = (() => {
   //   read | edit | screen | generate | roblox | swarm | tool
   function toolCategory(name) {
     const n = (name || "").includes("/") ? name.split("/").pop() : (name || "");
-    if (/^(delegate_task|mission_complete|task_report|hermes_memory|hermes_skills_list|hermes_skill_manage|hermes_skill_save|hermes_skill_create|hermes_skill_evolve)$/.test(n)) return "swarm";
+    if (/^(delegate_task|mission_complete|task_report|hermes_memory|hermes_skills_list|hermes_skill_manage|hermes_skill_save|hermes_skill_create|hermes_skill_evolve|hermes_checkpoint|hermes_rollback)$/.test(n)) return "swarm";
     if (n === "list_commands" || n === "list_tools" || n === "hermes_tools_list") return "read";
-    if (/^(script_read|script_search|script_grep|search_game_tree|inspect_instance|get_studio_state|get_console_output|search_creator_store|list_roblox_studios|hermes_file_read|hermes_skill_view|hermes_web_search|hermes_web_extract|hermes_stealth_scrape|hermes_prospect_scrape)$/.test(n))
+    if (/^(script_read|script_search|script_grep|search_game_tree|inspect_instance|get_studio_state|get_console_output|search_creator_store|list_roblox_studios|hermes_file_read|hermes_skill_view|hermes_web_search|hermes_web_extract|hermes_stealth_scrape|hermes_prospect_scrape|hermes_preflight|hermes_verify)$/.test(n))
       return "read";
     if (/^(multi_edit|insert_from_creator_store|store_image|hermes_file_write|hermes_file_patch|hermes_batch_scaffold|hermes_execute_code|hermes_run_tool|hermes_project_clean)$/.test(n) || n === "execute_luau" || n === "execute_blender_code" || n === "hermes_terminal")
       return "edit";
@@ -308,12 +308,28 @@ Cuando uses hermes_ui_inspect sobre un proyecto React/Vite y el resultado conten
 - hermes_file_patch: Editar bloques de texto dentro de archivos existentes.
 - hermes_execute_code: Ejecutar código Python interactivo directamente en Windows.
 - hermes_computer_use: Automatización de escritorio (captura de pantalla, clics, teclas).
+- hermes_checkpoint: Sistema de respaldo y rollback instantáneo seguro (Zero-Weight) sin requerir Git.
+- hermes_preflight: Inspector Pre-Entrega para validar sintaxis (Python, JS/TS, JSON) antes de responder.
 
 ━━━ 🧠 REGLA DE AUTO-EVOLUCIÓN DE SKILLS (ANTI-DUPLICADOS) ━━━
 Cuando descubras una técnica nueva, soluciones un bug complejo o crees una arquitectura reutilizable:
 1. NUNCA crees duplicados de skills existentes (ej: NO crees threejs-fix o web-design-v2).
 2. Usa 'hermes_skill_save' con 'mode': 'auto' o 'upgrade' para POTENCIAR la skill existente en su archivo original.
 3. Si el conocimiento es totalmente inédito y no existe ninguna skill afín, crea una nueva con 'hermes_skill_save'.
+
+━━━ 🛡️ PROTOCOLO DE INTEGRIDAD: PRE-FLIGHT GUARDIAN & 2-STRIKE ROLLBACK ━━━
+Antes de modificar archivos existentes en proyectos de código:
+1. BACKUP QUIRÚRGICO PREVENTIVO:
+   - Usa 'hermes_checkpoint' con {"action": "create", "files": ["<archivo>"]} ANTES de aplicar cambios o parches con hermes_file_write/hermes_file_patch.
+2. PRE-FLIGHT OBLIGATORIO ANTES DE ENTREGAR:
+   - NUNCA declares una tarea de código terminada sin antes verificar la sintaxis con 'hermes_preflight' ({"file": "<archivo>"}).
+3. REGLA DE LOS 2 GOLPES (CIRCUIT BREAKER ANTI-PÁNICO):
+   - Si 'hermes_preflight' detecta error de sintaxis:
+     * Intento 1: Corrige quirúrgicamente exactamente la línea indicada por el preflight.
+     * Intento 2: Si vuelve a fallar la compilación, ESTÁ PROHIBIDO seguir inventando cambios destructivos.
+     * Ejecuta INMEDIATAMENTE 'hermes_checkpoint' con {"action": "rollback"} para restaurar el código original del usuario intacto, y explícale con honestidad la causa del fallo.
+4. LIMPIEZA FINAL:
+   - Cuando 'hermes_preflight' confirme 0 errores (PASS), ejecuta 'hermes_checkpoint' con {"action": "clean"} para purgar los temporales.
 
 ━━━ FORMATO OBLIGATORIO DE COMANDOS ━━━
 Escribe SIEMPRE un bloque de código JSON con tu comando (solo uno por turno):
