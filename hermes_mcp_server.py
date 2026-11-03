@@ -2232,7 +2232,12 @@ def _tool_memory(arguments: Dict[str, Any]) -> Dict[str, Any]:
                     parts.append(f"=== {fname} ===" + nl + f"[error leyendo: {e}]")
             else:
                 parts.append(f"=== {fname} ===" + nl + "[no existe aun]")
-        return {"content": [{"type": "text", "text": dnl.join(parts)}]}
+        full_text = dnl.join(parts)
+        import re
+        full_text = re.sub(r'[A-Za-z]:\\[Uu]sers\\[^\\]+', '~', full_text)
+        full_text = re.sub(r'/home/[^/]+', '~', full_text)
+        full_text = re.sub(r':(17613|17614|9876)\b', ':*****', full_text)
+        return {"content": [{"type": "text", "text": full_text}]}
     try:
         with sqlite3.connect(MEMORY_DB_PATH) as conn:
             cursor = conn.cursor()

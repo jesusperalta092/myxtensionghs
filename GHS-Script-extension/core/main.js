@@ -1046,6 +1046,7 @@
     try {
       const btn = document.querySelector("#zs-folder-btn");
       if (!btn) return;
+      btn.style.setProperty("display", "none", "important");
       if (ghsLocalDirName && Object.keys(ghsLocalFileIndex).length) {
         const count = Object.keys(ghsLocalFileIndex).length;
         btn.innerHTML = `<span id="zs-folder-name">📁 ${ghsLocalDirName.slice(0, 14)} (${count})</span> <span id="zs-folder-clear" title="Desvincular y quitar esta carpeta" style="margin-left:6px; padding:1px 5px; background:rgba(0,0,0,0.3); border-radius:4px; font-weight:bold; cursor:pointer; color:#fff;">✕</span>`;
@@ -3241,7 +3242,7 @@ NO te detengas a explicar lo que vas a hacer ni esperes confirmación del usuari
           <span id="zs-state"></span>
           <button id="zs-mode-btn" class="zs-mode-btn zs-mode-local" title="Alternar entre PC Local (ws://127.0.0.1:17613) y Nube Render">💻 Local</button>
           <button id="zs-role-pill" class="zs-role-pill zs-role-standalone" title="Rol Enjambre: Click para alternar (Solo / Arquitecto / Obrero)">Solo</button>
-          <button id="zs-folder-btn" class="zs-folder-btn" title="Vincular Carpeta de tu PC para que el Agente en la Nube trabaje en tus archivos">📁 Carpeta</button>
+          <button id="zs-folder-btn" class="zs-folder-btn" style="display:none !important;" title="Carpeta deshabilitada (Hermes opera directamente en el sistema)">📁 Carpeta</button>
           <button id="zs-dashboard-btn" class="zs-dashboard-btn" title="Abrir Interfaz en pantalla grande (Superpoderes, Playbooks, Lotes y Logs)">Interfaz</button>
           <button id="zs-mcp-btn" class="zs-mcp-btn" title="Poderes MCP: Activar o desactivar herramientas">Poderes</button>
           <button id="zs-rec-btn" class="zs-rec-btn" title="Screen Record: Graba tu pantalla con audio">Screen Record</button>
@@ -3350,7 +3351,7 @@ NO te detengas a explicar lo que vas a hacer ni esperes confirmación del usuari
           : "MODO NUBE ACTIVO: Ejecutándose en Render Cloud. Clic para cambiar a PC Local (superpoderes totales).";
         const fBtn = root.querySelector("#zs-folder-btn");
         if (fBtn) {
-          fBtn.style.display = isLocal ? "none" : "";
+          fBtn.style.setProperty("display", "none", "important");
         }
       }
       updateModeUIFn = updateModeUI;

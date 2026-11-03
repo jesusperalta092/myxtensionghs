@@ -7,7 +7,7 @@
 const GHSSwarm = (() => {
   "use strict";
 
-  const DEFAULT_WORKSPACE = "c:\\Users\\USER\\Downloads";
+  const DEFAULT_WORKSPACE = "~/Downloads";
 
   const DEFAULT_HERMES_TOOLS_CATALOG = `  ✨ SUPERPODERES Y SKILLS DE DISEÑO WORLD-CLASS ACTIVAS EN EL MOTOR:
     • taste-skill: Motor de criterio estético y dirección de arte anti-slop (Leon Lin). Control de varianza, paletas editoriales cálidas, tipografía con alma, cero clichés de IA.

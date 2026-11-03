@@ -16,7 +16,7 @@
       this.state = {
         sessionId: null,
         projectName: "",
-        projectDir: "c:\\Users\\USER\\Downloads",
+        projectDir: "~/Downloads",
         status: "idle", // 'idle' | 'active' | 'quota_exhausted' | 'completed'
         mission: "",
         niche: "",
@@ -107,7 +107,7 @@
 
       // Si no tiene nombre explícito o tiene el fallback genérico 'proyecto', inferir del directorio o misión
       if (!this.state.projectName || this.state.projectName === "proyecto") {
-        if (this.state.projectDir && this.state.projectDir !== "c:\\Users\\USER\\Downloads") {
+        if (this.state.projectDir && this.state.projectDir !== "~/Downloads" && !this.state.projectDir.endsWith("\\Downloads")) {
           const parts = this.state.projectDir.replace(/\\/g, "/").split("/").filter(Boolean);
           this.state.projectName = parts[parts.length - 1] || "Proyecto Web";
         } else if (this.state.mission) {
@@ -128,7 +128,7 @@
           if (found.url) {
             this.state.devServerUrl = found.url;
           }
-          if (found.cwd && (!this.state.projectDir || this.state.projectDir === "c:\\Users\\USER\\Downloads" || this.state.projectDir.includes("apex-labs"))) {
+          if (found.cwd && (!this.state.projectDir || this.state.projectDir === "~/Downloads" || this.state.projectDir.includes("apex-labs"))) {
             this.state.projectDir = found.cwd;
           }
           if (found.project && (!this.state.projectName || this.state.projectName === "proyecto")) {
@@ -408,7 +408,7 @@ Continúa de inmediato a partir de la subtarea indicada.`;
           this.state = {
             sessionId: null,
             projectName: "",
-            projectDir: "c:\\Users\\USER\\Downloads",
+            projectDir: "~/Downloads",
             status: "idle",
             mission: "",
             niche: "",

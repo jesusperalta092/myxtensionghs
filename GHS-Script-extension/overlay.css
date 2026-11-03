@@ -1858,7 +1858,9 @@ html.zs-light .zs-operator-foot-txt {
    backend sigue intacta por si se necesita reactivar.
    ═══════════════════════════════════════════════════════════ */
 #zs-role-pill,
-#zs-hermes-btn {
+#zs-hermes-btn,
+#zs-folder-btn,
+.zs-folder-btn {
   display: none !important;
 }
 

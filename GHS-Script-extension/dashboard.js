@@ -2473,7 +2473,7 @@ Por favor espera unos segundos mientras la IA razona y estructura el blueprint..
     
     ws.send(JSON.stringify({ type: "call_tool", id: "del_cf_txt", name: "hermes_terminal", arguments: { command: "del /f /q cf_url.txt", is_daemon: false } }));
     
-    const cmd = 'cd /d C:\\Users\\USER\\Downloads\\GHS-Script-Free && run_tunnel.bat ' + port;
+    const cmd = 'cd /d "%USERPROFILE%\\Downloads\\GHS-Script-Free" && run_tunnel.bat ' + port;
     ws.send(JSON.stringify({ type: "call_tool", id: "run_tunnel_daemon", name: "hermes_terminal", arguments: { command: cmd, is_daemon: true } }));
     
     // Polling
