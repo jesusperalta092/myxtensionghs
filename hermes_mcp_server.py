@@ -1073,19 +1073,60 @@ def _tool_ui_inspect(arguments: Dict[str, Any]) -> Dict[str, Any]:
     device = arguments.get("device", "desktop").lower()
     scroll_y_raw = arguments.get("scroll_y", 0)
 
+    # Normalize file URLs or local HTML paths
+    if url:
+        clean_url = url.strip().strip("'\"")
+        if clean_url.endswith(".html") or clean_url.endswith(".htm") or os.path.isfile(clean_url):
+            url = "file:///" + os.path.abspath(clean_url).replace("\\", "/")
+        elif not clean_url.startswith("http://") and not clean_url.startswith("https://") and not clean_url.startswith("file://"):
+            if os.path.isfile(clean_url):
+                url = "file:///" + os.path.abspath(clean_url).replace("\\", "/")
+
     # Auto-detect local dev server if url is omitted or localhost
-    if not url:
+    if not url or url.startswith("http://localhost:5173"):
+        server_found = False
         for port in [5173, 3000, 4173, 8080, 8000]:
             try:
                 import urllib.request
-                with urllib.request.urlopen(f"http://localhost:{port}", timeout=1) as resp:
+                with urllib.request.urlopen(f"http://localhost:{port}", timeout=0.6) as resp:
                     if resp.status == 200:
                         url = f"http://localhost:{port}"
+                        server_found = True
                         break
             except Exception:
                 pass
-        if not url:
-            url = "http://localhost:5173"
+
+        # If no local port is active, look for recent index.html in Downloads or workspace
+        if not server_found:
+            downloads = os.path.join(os.path.expanduser("~"), "Downloads")
+            recent_html = None
+            recent_time = 0
+            try:
+                candidates = []
+                if os.path.isdir(downloads):
+                    for entry in os.scandir(downloads):
+                        if entry.is_dir() and not entry.name.startswith((".", "node_modules", "GHS-Script-Free")):
+                            sub_idx = os.path.join(entry.path, "index.html")
+                            if os.path.isfile(sub_idx):
+                                candidates.append(sub_idx)
+                    root_idx = os.path.join(downloads, "index.html")
+                    if os.path.isfile(root_idx):
+                        candidates.append(root_idx)
+                for cand in candidates:
+                    try:
+                        mtime = os.path.getmtime(cand)
+                        if mtime > recent_time:
+                            recent_time = mtime
+                            recent_html = cand
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+
+            if recent_html and (time.time() - recent_time) < 7200:
+                url = "file:///" + os.path.abspath(recent_html).replace("\\", "/")
+            elif not url:
+                url = "http://localhost:5173"
 
     # Device viewports
     devices = {
@@ -1103,7 +1144,7 @@ def _tool_ui_inspect(arguments: Dict[str, Any]) -> Dict[str, Any]:
     width, height = viewport_width, viewport_height
 
     # Primary method: Chrome / Edge Headless with full resolution & zero-cache
-    if url and url.startswith("http"):
+    if url and (url.startswith("http://") or url.startswith("https://") or url.startswith("file://")):
         browser_candidates = [
             r"C:\Program Files\Google\Chrome\Application\chrome.exe",
             r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
@@ -1222,55 +1263,16 @@ def _tool_ui_inspect(arguments: Dict[str, Any]) -> Dict[str, Any]:
                         shutil.rmtree(temp_profile, ignore_errors=True)
                     except Exception:
                         pass
-
-    if not img_bytes and mss is not None:
-        try:
-            with mss.mss() as sct:
-                monitor = sct.monitors[1] if len(sct.monitors) > 1 else sct.monitors[0]
-                sct_img = sct.grab(monitor)
-                width, height = sct_img.width, sct_img.height
-                if Image is not None:
-                    img = Image.frombytes("RGB", sct_img.size, sct_img.bgra, "raw", "BGRX")
-                    buf = io.BytesIO()
-                    img.save(buf, format="PNG", optimize=True)
-                    img_bytes = buf.getvalue()
-        except Exception:
-            pass
-
-    if not img_bytes and pyautogui is not None:
-        try:
-            shot = pyautogui.screenshot()
-            width, height = shot.size
-            buf = io.BytesIO()
-            shot.save(buf, format="PNG")
-            img_bytes = buf.getvalue()
-        except Exception:
-            pass
-
-    if not img_bytes and ImageGrab is not None:
-        try:
-            shot = ImageGrab.grab()
-            width, height = shot.size
-            buf = io.BytesIO()
-            shot.save(buf, format="PNG")
-            img_bytes = buf.getvalue()
-        except Exception:
-            pass
-
-    # Fallback card if all display capture fails
-    if not img_bytes and Image is not None and ImageDraw is not None:
-        try:
-            width, height = 1280, 720
-            canvas = Image.new("RGB", (width, height), color=(15, 23, 42))
-            draw = ImageDraw.Draw(canvas)
-            draw.rectangle([(20, 20), (width - 20, height - 20)], outline=(139, 92, 246), width=3)
-            draw.text((50, 50), "GHS Visual Inspector [Live Snapshot]", fill=(244, 114, 182))
-            draw.text((50, 120), f"Target URL: {url}", fill=(248, 250, 252))
-            buf = io.BytesIO()
-            canvas.save(buf, format="PNG")
-            img_bytes = buf.getvalue()
-        except Exception:
-            pass
+    if not img_bytes:
+        return {
+            "content": [
+                {
+                    "type": "text",
+                    "text": f"Error en hermes_ui_inspect: No se pudo conectar a '{url}' ni renderizar la página con Chrome Headless.\n• Si es un proyecto React/Vite, asegúrate de haber ejecutado 'npm run dev' con hermes_terminal (is_daemon: true) en el puerto 5173.\n• Si es un archivo HTML estático, especifica la ruta del archivo (ej: 'index.html')."
+                }
+            ],
+            "isError": True
+        }
 
     if img_bytes:
         save_path_msg = ""
