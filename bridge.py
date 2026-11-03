@@ -831,7 +831,11 @@ class MCPClient:
             # is run with the SAME interpreter the bridge itself uses, so it works
             # even on installs where only the `py` launcher exists (no `python`
             # on PATH). This is how the Studio MCP launcher is wired by default.
-            if cmd[0].lower().endswith(".py"):
+            if cmd[0].lower() in ("python", "python3", "python.exe"):
+                cmd[0] = sys.executable
+                if len(cmd) > 1 and cmd[1].lower().endswith(".py") and not os.path.isabs(cmd[1]):
+                    cmd[1] = os.path.join(HERE, cmd[1])
+            elif cmd[0].lower().endswith(".py"):
                 script = cmd[0]
                 if not os.path.isabs(script):
                     script = os.path.join(HERE, script)

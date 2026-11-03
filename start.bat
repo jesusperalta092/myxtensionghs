@@ -167,6 +167,16 @@ if errorlevel 1 (
 echo         OK
 call :log "Core libraries OK"
 
+REM Check and install headless Chromium for UI inspection and stealth scraping if needed
+%PY% -c "import playwright" >nul 2>nul
+if not errorlevel 1 (
+    if not exist "%LOCALAPPDATA%\ms-playwright" (
+        echo         Descargando Chromium para inspeccion visual UI y scraping...
+        call :log "Installing playwright chromium..."
+        %PY% -m playwright install chromium >nul 2>nul
+    )
+)
+
 REM --- 3. Scaffolding Universal Workspace ----------------------------------
 echo.
 echo   [3/4] Preparing Agent Workspace ^& Databases in Downloads...

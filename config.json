@@ -12,7 +12,7 @@
       "args": [
         "-y",
         "@modelcontextprotocol/server-filesystem",
-        "c:\\Users\\USER\\Downloads"
+        "%USERPROFILE%\\Downloads"
       ]
     },
     "sqlite": {
@@ -23,10 +23,8 @@
       ]
     },
     "hermes": {
-      "command": "python",
-      "args": [
-        "hermes_mcp_server.py"
-      ]
+      "command": "hermes_mcp_server.py",
+      "args": []
     },
     "figma": {
       "command": "npx.cmd",
@@ -40,7 +38,7 @@
     }
   },
   "security": {
-    "sandbox_dir": "c:\\Users\\USER\\Downloads",
+    "sandbox_dir": "%USERPROFILE%\\Downloads",
     "allow_read": true,
     "allow_write": true,
     "allow_delete": false,
