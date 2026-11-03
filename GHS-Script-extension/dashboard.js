@@ -2094,6 +2094,42 @@ Por favor espera unos segundos mientras la IA razona y estructura el blueprint..
       });
     }
 
+    const bgBadge = document.getElementById("top-bg-badge");
+    const bgLabel = document.getElementById("top-bg-label");
+    const bgDot = document.getElementById("bg-status-dot");
+    function updateDashboardBgUI(isOn) {
+      if (!bgLabel || !bgDot) return;
+      bgLabel.textContent = isOn ? "2do Plano: ON" : "2do Plano: OFF";
+      bgDot.style.background = isOn ? "#a855f7" : "#64748b";
+      bgDot.classList.toggle("pulsing", !!isOn);
+      if (bgBadge) {
+        bgBadge.title = isOn 
+          ? "SEGUNDO PLANO ACTIVO: El agente seguirá trabajando sin detenerse aunque minimices la ventana o cambies de pestaña. Clic para desactivar."
+          : "SEGUNDO PLANO DESACTIVADO: Clic para activar el modo autónomo infinito (no se duerme al minimizar o cambiar de pestaña).";
+      }
+    }
+    if (window.chrome && chrome.storage && chrome.storage.local) {
+      chrome.storage.local.get("ghs_bg_mode", (r) => {
+        const cur = r && r.ghs_bg_mode === true;
+        updateDashboardBgUI(cur);
+      });
+      chrome.storage.onChanged.addListener((changes, area) => {
+        if (area === "local" && changes.ghs_bg_mode) {
+          updateDashboardBgUI(changes.ghs_bg_mode.newValue === true);
+        }
+      });
+      if (bgBadge) {
+        bgBadge.addEventListener("click", () => {
+          chrome.storage.local.get("ghs_bg_mode", (r) => {
+            const nextVal = !(r && r.ghs_bg_mode === true);
+            chrome.storage.local.set({ ghs_bg_mode: nextVal }, () => {
+              updateDashboardBgUI(nextVal);
+            });
+          });
+        });
+      }
+    }
+
     function executeDevServerTool(args, callback) {
       if (window.chrome && chrome.runtime && chrome.runtime.sendMessage) {
         chrome.runtime.sendMessage({

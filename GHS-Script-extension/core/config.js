@@ -26,7 +26,7 @@ const ZS = (() => {
     if (n === "list_commands" || n === "list_tools" || n === "hermes_tools_list") return "read";
     if (/^(script_read|script_search|script_grep|search_game_tree|inspect_instance|get_studio_state|get_console_output|search_creator_store|list_roblox_studios|hermes_file_read|hermes_skill_view|hermes_web_search|hermes_web_extract|hermes_stealth_scrape|hermes_prospect_scrape)$/.test(n))
       return "read";
-    if (/^(multi_edit|insert_from_creator_store|store_image|hermes_file_write|hermes_file_patch|hermes_execute_code|hermes_run_tool|hermes_project_clean)$/.test(n) || n === "execute_luau" || n === "execute_blender_code" || n === "hermes_terminal")
+    if (/^(multi_edit|insert_from_creator_store|store_image|hermes_file_write|hermes_file_patch|hermes_batch_scaffold|hermes_execute_code|hermes_run_tool|hermes_project_clean)$/.test(n) || n === "execute_luau" || n === "execute_blender_code" || n === "hermes_terminal")
       return "edit";
     if (n === "screen_capture" || /screenshot/i.test(n) || n === "capture_screen" || n === "hermes_computer_use" || n === "hermes_ui_inspect") return "screen";
     if (/^(learn_lesson|get_brain_rules|save_playbook|get_playbook|convert_demonstration_to_playbook)$/.test(n)) return "swarm";

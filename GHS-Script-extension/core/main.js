@@ -109,6 +109,7 @@
   ];
 
   const A = {
+    backgroundMode: (typeof localStorage !== "undefined" && localStorage.getItem("ghs_bg_mode") === "true") || false,
     role: (typeof localStorage !== "undefined" && localStorage.getItem("zs_tab_role")) || "standalone", // "standalone" | "architect" | "worker"
     activeSwarmTask: null, // { subtaskId, fromTab }
     running: false,
@@ -209,8 +210,42 @@
   // minute to notice the tab came back - the user sees the bar sit on "Paused"
   // long after they returned. visibilitychange fires immediately on unhide, so we
   // race it against a slow stop-poll (the stop path is not latency-critical).
+  // ── [BACKGROUND ANTI-SLEEP] Keep-Alive Audio Engine ────────────────────────
+  let _bgAudioCtx = null;
+  function updateBackgroundModeAudio() {
+    if (A.backgroundMode) {
+      try {
+        if (!_bgAudioCtx) {
+          const AudioContext = window.AudioContext || window.webkitAudioContext;
+          if (AudioContext) {
+            _bgAudioCtx = new AudioContext();
+            const osc = _bgAudioCtx.createOscillator();
+            const gain = _bgAudioCtx.createGain();
+            gain.gain.value = 0.00001; // Inaudible micro-pulse to keep Chrome timers unthrottled
+            osc.connect(gain);
+            gain.connect(_bgAudioCtx.destination);
+            osc.start();
+            log("Background keep-alive audio active.");
+          }
+        }
+      } catch (e) {
+        console.warn("[GHS] Background audio keep-alive error:", e);
+      }
+    } else {
+      try {
+        if (_bgAudioCtx) {
+          _bgAudioCtx.close();
+          _bgAudioCtx = null;
+          log("Background keep-alive audio released.");
+        }
+      } catch {}
+    }
+  }
+
+  // Park until the AI tab is the FOREGROUND tab of its window again (or the user
+  // halts). If backgroundMode is enabled, NEVER park: continue execution continuously!
   async function waitVisible() {
-    if (!document.hidden || A.stop) return !A.stop;
+    if (A.backgroundMode || !document.hidden || A.stop) return !A.stop;
     A.parked = true;
     try { ui.setStarting(); } catch {}
     try {
@@ -220,11 +255,11 @@
           clearInterval(iv);
           resolve();
         };
-        const onVis = () => { if (!document.hidden) done(); };
+        const onVis = () => { if (A.backgroundMode || !document.hidden) done(); };
         document.addEventListener("visibilitychange", onVis);
         // Safety net only: covers a stop click while parked, and the (unlikely)
         // case of a missed visibilitychange event.
-        const iv = setInterval(() => { if (A.stop || !document.hidden) done(); }, 1000);
+        const iv = setInterval(() => { if (A.stop || A.backgroundMode || !document.hidden) done(); }, 1000);
       });
     } finally {
       A.parked = false;
@@ -233,14 +268,9 @@
     return !A.stop;
   }
 
-  // Park while the tab is hidden and report how long we were parked, so callers
-  // can slide their timers forward by that amount. Without this, every deadline
-  // inside waitForResponse (inactivity timeout, warm-up, text-stability) keeps
-  // ticking while nothing can be read - which is what turned "user switched to
-  // Studio for 5 minutes" into "No response from <site>, the loop has stopped"
-  // and left the pending command showing a grey "not run".
+  // Park while the tab is hidden unless backgroundMode is enabled.
   async function parkHidden() {
-    if (!document.hidden || A.stop) return 0;
+    if (A.backgroundMode || !document.hidden || A.stop) return 0;
     const t0 = Date.now();
     await waitVisible();
     const parked = Date.now() - t0;
@@ -3242,6 +3272,7 @@ NO te detengas a explicar lo que vas a hacer ni esperes confirmación del usuari
           <span id="zs-state"></span>
           <button id="zs-mode-btn" class="zs-mode-btn zs-mode-local" title="Alternar entre PC Local (ws://127.0.0.1:17613) y Nube Render">💻 Local</button>
           <button id="zs-role-pill" class="zs-role-pill zs-role-standalone" title="Rol Enjambre: Click para alternar (Solo / Arquitecto / Obrero)">Solo</button>
+          <button id="zs-bg-btn" class="zs-bg-btn zs-bg-off" title="Modo Segundo Plano (Anti-Sleep): Permite al agente seguir trabajando sin detenerse aunque minimices la ventana o cambies de pestaña">⚡ 2do Plano</button>
           <button id="zs-folder-btn" class="zs-folder-btn" style="display:none !important;" title="Carpeta deshabilitada (Hermes opera directamente en el sistema)">📁 Carpeta</button>
           <button id="zs-dashboard-btn" class="zs-dashboard-btn" title="Abrir Interfaz en pantalla grande (Superpoderes, Playbooks, Lotes y Logs)">Interfaz</button>
           <button id="zs-mcp-btn" class="zs-mcp-btn" title="Poderes MCP: Activar o desactivar herramientas">Poderes</button>
@@ -3380,6 +3411,45 @@ NO te detengas a explicar lo que vas a hacer ni esperes confirmación del usuari
             });
           } catch(err) { console.warn("Mode switch error:", err); }
         });
+      }
+
+      // Background Anti-Sleep toggle handler
+      const bgBtn = root.querySelector("#zs-bg-btn");
+      function updateBgBtnUI() {
+        if (!bgBtn) return;
+        const isOn = !!A.backgroundMode;
+        bgBtn.className = "zs-bg-btn " + (isOn ? "zs-bg-on" : "zs-bg-off");
+        bgBtn.textContent = isOn ? "⚡ 2do Plano: ON" : "⚡ 2do Plano";
+        bgBtn.title = isOn
+          ? "SEGUNDO PLANO ACTIVO: El agente seguirá trabajando sin detenerse aunque minimices la ventana o cambies de pestaña. Clic para desactivar."
+          : "SEGUNDO PLANO DESACTIVADO: Clic para activar el modo autónomo infinito (no se duerme al minimizar o cambiar de pestaña).";
+      }
+      if (bgBtn) {
+        bgBtn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          A.backgroundMode = !A.backgroundMode;
+          try {
+            if (typeof localStorage !== "undefined") localStorage.setItem("ghs_bg_mode", String(A.backgroundMode));
+            chrome.storage.local.set({ ghs_bg_mode: A.backgroundMode });
+          } catch(err) {}
+          updateBgBtnUI();
+          updateBackgroundModeAudio();
+          toast(A.backgroundMode ? "⚡ Modo 2do Plano ACTIVADO (Anti-Sleep)" : "⚡ Modo 2do Plano DESACTIVADO (Pausa en segundo plano)");
+          if (A.backgroundMode && A.parked) {
+            document.dispatchEvent(new Event("visibilitychange"));
+          }
+        });
+        try {
+          chrome.storage.local.get("ghs_bg_mode", (r) => {
+            if (r && typeof r.ghs_bg_mode !== "undefined") {
+              A.backgroundMode = !!r.ghs_bg_mode;
+            }
+            updateBgBtnUI();
+            if (A.backgroundMode) updateBackgroundModeAudio();
+          });
+        } catch(e) {
+          updateBgBtnUI();
+        }
       }
 
             const folderBtn = root.querySelector("#zs-folder-btn");

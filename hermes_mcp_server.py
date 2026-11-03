@@ -1589,11 +1589,20 @@ def _tool_terminal(arguments: Dict[str, Any]) -> Dict[str, Any]:
             cmd_stripped = command.strip()
             lowered = cmd_stripped.lower()
 
+        # Auto-heal single-quoted cd commands in Windows CMD (e.g. cd 'C:\...' -> cd /d "C:\...")
+        command = re.sub(r"\bcd(?:\s+/d)?\s+'([^']+)'", r'cd /d "\1"', command, flags=re.IGNORECASE)
+        def _norm_cd_path(m):
+            return f'cd /d "{m.group(1).replace("/", chr(92))}"'
+        command = re.sub(r'\bcd\s+/d\s+"([a-zA-Z]:[^"]+)"', _norm_cd_path, command, flags=re.IGNORECASE)
+        cmd_stripped = command.strip()
+        lowered = cmd_stripped.lower()
+
         # 2. If command is a bare PowerShell cmdlet or starts with $ (PowerShell variable/expression)
         ps_cmdlets = (
             "new-item", "get-item", "remove-item", "copy-item", "move-item", "set-item",
             "get-childitem", "test-path", "start-process", "stop-process", "set-content",
-            "get-content", "add-content", "clear-content"
+            "get-content", "add-content", "clear-content", "set-location", "select-object",
+            "where-object", "format-list", "format-table", "measure-object", "out-string"
         )
         if cmd_stripped.startswith("$") or any(lowered.startswith(cmdlet + " ") or lowered == cmdlet for cmdlet in ps_cmdlets):
             if not lowered.startswith("powershell"):
@@ -2087,6 +2096,65 @@ def _tool_file_write(arguments: Dict[str, Any]) -> Dict[str, Any]:
         return {"content": [{"type": "text", "text": f"Archivo guardado exitosamente: {target_path} ({len(content)} bytes)."}]}
     except Exception as e:
         return {"content": [{"type": "text", "text": f"Error al escribir archivo en '{target_path}': {e}"}], "isError": True}
+
+
+def _tool_batch_scaffold(arguments: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Crea múltiples archivos de andamiaje o configuración (boilerplate)
+    de forma atómica, validando sintaxis JSON antes de escribir en disco.
+    Reduce drásticamente el lag y el consumo de tokens en proyectos nuevos.
+    """
+    root_dir = arguments.get("root") or arguments.get("root_dir") or arguments.get("project_dir") or ""
+    files = arguments.get("files") or arguments.get("bundle") or {}
+
+    if not files:
+        return {"content": [{"type": "text", "text": "Error: 'files' es requerido (diccionario de {ruta: contenido})."}], "isError": True}
+
+    file_map = {}
+    if isinstance(files, dict):
+        file_map = files
+    elif isinstance(files, list):
+        for item in files:
+            if isinstance(item, dict) and "path" in item and "content" in item:
+                file_map[item["path"]] = item["content"]
+
+    if not file_map:
+        return {"content": [{"type": "text", "text": "Error: 'files' debe ser un diccionario con al menos un archivo."}], "isError": True}
+
+    # Pre-flight check: validate JSON files before touching disk
+    validation_errors = []
+    for rel_path, content in file_map.items():
+        if rel_path.lower().endswith(".json"):
+            try:
+                json.loads(content)
+            except Exception as e:
+                validation_errors.append(f"JSON inválido en '{rel_path}': {e}")
+
+    if validation_errors:
+        err_msg = "Error de validación pre-vuelo en hermes_batch_scaffold (abortado antes de escribir en disco):\n- " + "\n- ".join(validation_errors)
+        return {"content": [{"type": "text", "text": err_msg}], "isError": True}
+
+    # Atomic write
+    created_files = []
+    total_bytes = 0
+    try:
+        for rel_path, content in file_map.items():
+            full_path = os.path.join(root_dir, rel_path) if root_dir else rel_path
+            target_path = resolve_target_path(full_path)
+            os.makedirs(os.path.dirname(target_path), exist_ok=True)
+            content_str = str(content) if not isinstance(content, str) else content
+            with open(target_path, "w", encoding="utf-8", errors="replace") as f:
+                f.write(content_str)
+            created_files.append(f"{os.path.basename(target_path)} ({len(content_str)} B)")
+            total_bytes += len(content_str)
+
+        summary = (
+            f"✓ Scaffolding por lote completado con éxito: {len(created_files)} archivos creados "
+            f"({total_bytes} bytes totales):\n  • " + "\n  • ".join(created_files)
+        )
+        return {"content": [{"type": "text", "text": summary}]}
+    except Exception as e:
+        return {"content": [{"type": "text", "text": f"Error durante hermes_batch_scaffold: {e}"}], "isError": True}
 
 
 def _tool_file_patch(arguments: Dict[str, Any]) -> Dict[str, Any]:
@@ -2856,6 +2924,18 @@ TOOLS = [
         }
     },
     {
+        "name": "hermes_batch_scaffold",
+        "description": "Crea múltiples archivos de andamiaje o configuración (boilerplate) en un solo turno de forma atómica y valida sintaxis JSON antes de escribir en disco.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "root": {"type": "string", "description": "Carpeta raíz o del proyecto (opcional)."},
+                "files": {"type": "object", "description": "Diccionario de rutas relativas y contenidos {'package.json': '...', 'vite.config.ts': '...'}"}
+            },
+            "required": ["files"]
+        }
+    },
+    {
         "name": "hermes_toggle_skill",
         "description": "Activa o desactiva una skill en disabled_skills.json. Las skills desactivadas no aparecen en hermes_skills_list.",
         "inputSchema": {
@@ -3257,6 +3337,8 @@ def main():
                     res = _tool_file_write(args)
                 elif name in ("hermes_file_patch", "hermes_patch"):
                     res = _tool_file_patch(args)
+                elif name in ("hermes_batch_scaffold", "hermes_bundle_write"):
+                    res = _tool_batch_scaffold(args)
                 elif name == "hermes_toggle_skill":
                     res = _tool_toggle_skill(args)
                 elif name == "hermes_memory":

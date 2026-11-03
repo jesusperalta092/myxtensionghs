@@ -1229,6 +1229,42 @@ html.zs-light .zs-tip-rbx { color: #374151; }
   box-shadow: 0 0 14px rgba(37, 99, 235, 0.6) !important;
 }
 
+/* Background Anti-Sleep Button */
+.zs-bg-btn {
+  flex: none;
+  height: 27px !important;
+  padding: 0 10px !important;
+  border-radius: 7px !important;
+  font-size: 11.5px !important;
+  font-weight: 700 !important;
+  cursor: pointer;
+  white-space: nowrap !important;
+  transition: all 0.2s ease !important;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.zs-bg-btn.zs-bg-off {
+  background: rgba(255, 255, 255, 0.08) !important;
+  color: #a1a1aa !important;
+  border: 1px solid rgba(255, 255, 255, 0.14) !important;
+}
+.zs-bg-btn.zs-bg-off:hover {
+  background: rgba(255, 255, 255, 0.15) !important;
+  color: #ffffff !important;
+  border-color: rgba(255, 255, 255, 0.25) !important;
+}
+.zs-bg-btn.zs-bg-on {
+  background: linear-gradient(135deg, #7c3aed, #a855f7) !important;
+  color: #ffffff !important;
+  border: 1px solid rgba(255, 255, 255, 0.3) !important;
+  box-shadow: 0 0 12px rgba(168, 85, 247, 0.6) !important;
+}
+.zs-bg-btn.zs-bg-on:hover {
+  filter: brightness(1.1) !important;
+  box-shadow: 0 0 16px rgba(168, 85, 247, 0.8) !important;
+}
+
 /* Folder Button (Sky Blue / Cyan Gradient) */
 .zs-folder-btn {
   background: linear-gradient(135deg, #0284c7, #0ea5e9) !important;
