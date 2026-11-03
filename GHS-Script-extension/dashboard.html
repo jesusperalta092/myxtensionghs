@@ -155,6 +155,138 @@
           <button class="btn-primary" id="btn-reload-mcp">⟳ Recargar Servidores</button>
         </div>
 
+        <!-- SECCIÓN DESTACADA: SUPERPODERES PROPIETARIOS -->
+        <div class="proprietary-banner" style="margin-bottom: 24px; background: linear-gradient(135deg, rgba(124, 58, 237, 0.08) 0%, rgba(59, 130, 246, 0.05) 100%); border: 1px solid rgba(168, 85, 247, 0.35); border-radius: var(--radius-lg); padding: 18px 22px; box-shadow: 0 4px 20px rgba(168, 85, 247, 0.07);">
+          <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-bottom: 16px;">
+            <div style="display: flex; align-items: center; gap: 12px;">
+              <div style="width: 42px; height: 42px; border-radius: 10px; background: linear-gradient(135deg, #7c3aed, #a855f7); display: flex; align-items: center; justify-content: center; font-size: 20px; box-shadow: 0 4px 12px rgba(168, 85, 247, 0.4);">⭐</div>
+              <div>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                  <h2 style="font-size: 16px; font-weight: 800; color: var(--ink-base); margin: 0;">Superpoderes & Habilidades Propietarias</h2>
+                  <span style="background: linear-gradient(135deg, #7c3aed, #a855f7); color: #fff; font-size: 10px; font-weight: 800; padding: 2px 8px; border-radius: 12px; letter-spacing: 0.5px; text-transform: uppercase;">CREACIÓN PROPIA</span>
+                </div>
+                <p style="font-size: 12px; color: var(--ink-muted); margin: 3px 0 0 0;">
+                  Arquitectura exclusiva desarrollada por nosotros: Scaffolding Atómico 1-turno, Terminal Auto-Cura, Auditoría Visual y Anti-Sleep.
+                </p>
+              </div>
+            </div>
+            <button class="btn-secondary" id="btn-open-paper" style="display: inline-flex; align-items: center; gap: 6px; font-weight: 700; color: #a855f7; border-color: rgba(168,85,247,0.4); background: rgba(168,85,247,0.08);">
+              📄 Ver Paper Oficial
+            </button>
+          </div>
+
+          <!-- Grid de Poderes Propietarios -->
+          <div class="cards-grid" id="proprietary-powers-grid" style="grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px;">
+            <!-- Card 1: Batch Scaffold -->
+            <div class="power-card" style="border: 1px solid rgba(168, 85, 247, 0.3); background: var(--surface-card);">
+              <div class="card-header">
+                <div class="card-avatar" style="background: rgba(168, 85, 247, 0.15); color: #a855f7; font-weight: 800; font-size: 13px;">⚡</div>
+                <div class="card-meta">
+                  <span class="card-tag" style="color: #a855f7;">HERRAMIENTA LOCAL</span>
+                  <h3 class="card-title">hermes_batch_scaffold</h3>
+                </div>
+                <span style="font-size: 10px; font-weight: 800; background: rgba(16, 185, 129, 0.15); color: #10b981; padding: 2px 6px; border-radius: 4px;">1 TURNO</span>
+              </div>
+              <p class="card-desc">Crea esqueletos completos de proyectos (package.json, tsconfig, vite, etc.) en 1 solo turno de 50ms con validación previa de JSON. Elimina el 70% de tokens y el lag de 20 turnos.</p>
+              <div class="card-footer">
+                <span class="card-status status-active">ACTIVO EN MOTOR</span>
+                <span class="card-tools-badge" style="background: rgba(168, 85, 247, 0.1); color: #a855f7; font-weight: 700;">PROPIETARIO</span>
+              </div>
+            </div>
+
+            <!-- Card 2: Terminal Auto-Cura -->
+            <div class="power-card" style="border: 1px solid rgba(168, 85, 247, 0.3); background: var(--surface-card);">
+              <div class="card-header">
+                <div class="card-avatar" style="background: rgba(16, 185, 129, 0.15); color: #10b981; font-weight: 800; font-size: 13px;">🛡️</div>
+                <div class="card-meta">
+                  <span class="card-tag" style="color: #10b981;">TERMINAL BLINDADA</span>
+                  <h3 class="card-title">hermes_terminal (Auto-Cura)</h3>
+                </div>
+                <span style="font-size: 10px; font-weight: 800; background: rgba(16, 185, 129, 0.15); color: #10b981; padding: 2px 6px; border-radius: 4px;">AUTO-FIX</span>
+              </div>
+              <p class="card-desc">Interceptor transparente de sintaxis Windows: reescribe automáticamente <code>cd 'C:\...'</code> en <code>cd /d "..."</code> y detecta cmdlets PowerShell envolviéndolos sin error.</p>
+              <div class="card-footer">
+                <span class="card-status status-active">ACTIVO EN MOTOR</span>
+                <span class="card-tools-badge" style="background: rgba(16, 185, 129, 0.1); color: #10b981; font-weight: 700;">PROPIETARIO</span>
+              </div>
+            </div>
+
+            <!-- Card 3: Modo 2do Plano Infinito -->
+            <div class="power-card" style="border: 1px solid rgba(168, 85, 247, 0.3); background: var(--surface-card);">
+              <div class="card-header">
+                <div class="card-avatar" style="background: rgba(168, 85, 247, 0.15); color: #a855f7; font-weight: 800; font-size: 13px;">🌙</div>
+                <div class="card-meta">
+                  <span class="card-tag" style="color: #a855f7;">ANTI-SLEEP ENGINE</span>
+                  <h3 class="card-title">Modo Segundo Plano Infinito</h3>
+                </div>
+                <span style="font-size: 10px; font-weight: 800; background: rgba(168, 85, 247, 0.15); color: #a855f7; padding: 2px 6px; border-radius: 4px;">KEEP-ALIVE</span>
+              </div>
+              <p class="card-desc">Emite un micro-pulso de audio inaudible para que el navegador no ralentice los temporizadores y anula la pausa por pestaña oculta (document.hidden). El agente nunca se duerme.</p>
+              <div class="card-footer">
+                <span class="card-status status-active">ACTIVO EN EXTENSIÓN</span>
+                <span class="card-tools-badge" style="background: rgba(168, 85, 247, 0.1); color: #a855f7; font-weight: 700;">PROPIETARIO</span>
+              </div>
+            </div>
+
+            <!-- Card 4: Skill Three.js Offline-First -->
+            <div class="power-card" style="border: 1px solid rgba(168, 85, 247, 0.3); background: var(--surface-card);">
+              <div class="card-header">
+                <div class="card-avatar" style="background: rgba(244, 63, 94, 0.15); color: #f43f5e; font-weight: 800; font-size: 13px;">🎨</div>
+                <div class="card-meta">
+                  <span class="card-tag" style="color: #f43f5e;">SKILL 3D MAESTRA</span>
+                  <h3 class="card-title">threejs-worldclass-offline</h3>
+                </div>
+                <span style="font-size: 10px; font-weight: 800; background: rgba(244, 63, 94, 0.15); color: #f43f5e; padding: 2px 6px; border-radius: 4px;">ZERO-SUSPENSE</span>
+              </div>
+              <p class="card-desc">Criterio técnico de render 3D offline: prohíbe presets remotos de CDN que congelan la pantalla en blanco y enseña iluminación procedural adaptable a arquitectura, producto o sci-fi.</p>
+              <div class="card-footer">
+                <span class="card-status status-active">ACTIVO EN SKILLS</span>
+                <span class="card-tools-badge" style="background: rgba(244, 63, 94, 0.1); color: #f43f5e; font-weight: 700;">PROPIETARIO</span>
+              </div>
+            </div>
+
+            <!-- Card 5: hermes_ui_inspect -->
+            <div class="power-card" style="border: 1px solid rgba(168, 85, 247, 0.3); background: var(--surface-card);">
+              <div class="card-header">
+                <div class="card-avatar" style="background: rgba(59, 130, 246, 0.15); color: #3b82f6; font-weight: 800; font-size: 13px;">👁️</div>
+                <div class="card-meta">
+                  <span class="card-tag" style="color: #3b82f6;">MOTOR VISUAL</span>
+                  <h3 class="card-title">hermes_ui_inspect</h3>
+                </div>
+                <span style="font-size: 10px; font-weight: 800; background: rgba(59, 130, 246, 0.15); color: #3b82f6; padding: 2px 6px; border-radius: 4px;">CIRCUITO CERRADO</span>
+              </div>
+              <p class="card-desc">Auditoría fotográfica con Chrome Headless y análisis de DevTools. Detecta pantallas rojas (Vite HTTP 500, PostCSS) y obliga a la IA a auto-reparar antes de entregar.</p>
+              <div class="card-footer">
+                <span class="card-status status-active">ACTIVO EN MOTOR</span>
+                <span class="card-tools-badge" style="background: rgba(59, 130, 246, 0.1); color: #3b82f6; font-weight: 700;">PROPIETARIO</span>
+              </div>
+            </div>
+
+            <!-- Card 6: Memoria Cifrada 3 Capas -->
+            <div class="power-card" style="border: 1px solid rgba(168, 85, 247, 0.3); background: var(--surface-card);">
+              <div class="card-header">
+                <div class="card-avatar" style="background: rgba(245, 158, 11, 0.15); color: #f59e0b; font-weight: 800; font-size: 13px;">🧠</div>
+                <div class="card-meta">
+                  <span class="card-tag" style="color: #f59e0b;">CEREBRO & PRIVACIDAD</span>
+                  <h3 class="card-title">Memoria Cifrada + Filtro Anti-PII</h3>
+                </div>
+                <span style="font-size: 10px; font-weight: 800; background: rgba(245, 158, 11, 0.15); color: #f59e0b; padding: 2px 6px; border-radius: 4px;">FERNET AES</span>
+              </div>
+              <p class="card-desc">Persistencia de SOUL, USER y MEMORY cifrados en reposo, combinados con filtro en tiempo real que enmascara rutas de Windows (~/Downloads) evitando disparar filtros de seguridad.</p>
+              <div class="card-footer">
+                <span class="card-status status-active">ACTIVO EN MOTOR</span>
+                <span class="card-tools-badge" style="background: rgba(245, 158, 11, 0.1); color: #f59e0b; font-weight: 700;">PROPIETARIO</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- DIVISOR DE CATÁLOGO GENERAL -->
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px;">
+          <h2 style="font-size: 15px; font-weight: 700; color: var(--ink-base); margin: 0;">Catálogo General de Habilidades del Sistema</h2>
+          <span style="font-size: 12px; color: var(--ink-muted);" id="catalog-subcount">83 Skills Disponibles</span>
+        </div>
+
         <div class="cards-grid" id="mcp-grid">
         </div>
       </section>
@@ -926,8 +1058,26 @@
           </pre>
         </div>
       </section>
-
     </main>
+  </div>
+
+  <!-- Modal para ver el Paper Oficial -->
+  <div id="paper-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0, 0, 0, 0.75); z-index: 10000; align-items: center; justify-content: center; backdrop-filter: blur(5px);">
+    <div style="background: var(--surface-card); width: 92%; max-width: 950px; height: 85vh; border-radius: var(--radius-lg); border: 1px solid rgba(168,85,247,0.3); box-shadow: 0 10px 40px rgba(0,0,0,0.5); display: flex; flex-direction: column; overflow: hidden;">
+      <div style="padding: 16px 22px; border-bottom: 1px solid var(--border-stone); display: flex; align-items: center; justify-content: space-between; background: linear-gradient(135deg, rgba(124, 58, 237, 0.1), rgba(59, 130, 246, 0.05));">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <span style="font-size: 22px;">📄</span>
+          <div>
+            <h3 style="margin: 0; font-size: 16px; font-weight: 800; color: var(--ink-base);">Registro Oficial de Propiedad Intelectual & Superpoderes</h3>
+            <span style="font-size: 11px; color: var(--ink-muted);">GHS Autonomous Core & Hermes OS — Innovaciones Propias</span>
+          </div>
+        </div>
+        <button id="btn-close-paper" style="background: rgba(255,255,255,0.1); border: 1px solid var(--border-stone); width: 32px; height: 32px; border-radius: 8px; font-size: 18px; cursor: pointer; color: var(--ink-base); display: flex; align-items: center; justify-content: center;">✕</button>
+      </div>
+      <div id="paper-content" style="padding: 26px; overflow-y: auto; font-size: 13.5px; line-height: 1.7; color: var(--ink-base); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+        <!-- Se inyecta dinámicamente -->
+      </div>
+    </div>
   </div>
 
   <script src="session_manager.js"></script>

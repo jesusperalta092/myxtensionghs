@@ -2730,9 +2730,12 @@ Por favor espera unos segundos mientras la IA razona y estructura el blueprint..
     if (countEl) countEl.textContent = skills.length;
     const elSkills = document.getElementById("mcp-stat-skills");
     if (elSkills) elSkills.textContent = `🧠 ${skills.length} Skills Activas`;
+    const catalogSub = document.getElementById("catalog-subcount");
+    if (catalogSub) catalogSub.textContent = `${skills.length} Skills Disponibles`;
 
     // Diccionario de traducciones y mejoras
     const translations = {
+      'threejs-worldclass-offline': '⭐ CREACIÓN PROPIA: Directivas maestras 3D Offline-First y Zero-Suspense. Iluminación procedural autónoma sin presets remotos de CDN que congelen la pantalla.',
       'yuanbao': 'Gestión de grupos de Yuanbao (Tencent). Permite buscar miembros, stickers y enviar mensajes.',
       'claude-code': 'Delega la programación a la CLI de Claude Code. Útil para PRs y features complejas.',
       'codex': 'Delega la programación a la CLI de OpenAI Codex. Especializado en lógica y matemáticas.',
@@ -2743,13 +2746,6 @@ Por favor espera unos segundos mientras la IA razona y estructura el blueprint..
       'systematic-debugging': 'Depuración sistemática de 4 fases. Analiza la causa raíz antes de tocar el código.',
       'test-driven-development': 'Desarrollo guiado por pruebas (TDD). Escribe el test primero, luego el código.',
       'blocked-page-recovery': 'Bypass de bloqueos web. Útil para páginas con CAPTCHAs, paywalls o Cloudflare.',
-      'requesting-code-review': 'Revisión de código pre-commit: escaneo de seguridad y auto-fixes.',
-
-      'systematic-debugging': 'Depuración sistemática de 4 fases. Analiza la causa raíz antes de tocar el código.',
-      'test-driven-development': 'Desarrollo guiado por pruebas (TDD). Escribe el test primero, luego el código.',
-      'spike': 'Experimentación rápida para validar ideas antes de implementar.',
-      'requesting-code-review': 'Revisión automática de código (seguridad, calidad, fixes).',
-      'simplify-code': 'Limpieza y refactorización de código reciente por 4 agentes en paralelo.',
       'impeccable-design': 'Sistema de diseño estricto de 8 puntos, contraste WCAG AAA y glassmorphism.',
       'taste-skill': 'Filtro anti-diseño genérico. Evita gradientes de IA y falta de jerarquía.',
       'prompt-builder-master': 'Orquestador de diseño artesanal. Pipeline de 3 fases para landings de $500k.',
@@ -2761,16 +2757,31 @@ Por favor espera unos segundos mientras la IA razona y estructura el blueprint..
       'design-md': 'Google DESIGN.md. Define tokens de diseño exportables a CSS/Tailwind.'
     };
 
+    // Priorizar skills de creación propia al inicio del catálogo
+    skills.sort(function(a, b) {
+      if (a.name === 'threejs-worldclass-offline') return -1;
+      if (b.name === 'threejs-worldclass-offline') return 1;
+      return (a.name || '').localeCompare(b.name || '');
+    });
+
     skills.forEach(function(sk) {
       const card = document.createElement("div");
       card.className = "power-card";
       card.dataset.server = sk.name;
-      const info = catMap[sk.category] || { color: "#f59e0b", label: (sk.category || "SKILL").toUpperCase() };
-      const initials = (sk.category || "S").substring(0, 3).toUpperCase();
+      const isProprietary = sk.name === 'threejs-worldclass-offline';
+      if (isProprietary) {
+        card.style.border = "2px solid rgba(168, 85, 247, 0.6)";
+        card.style.boxShadow = "0 0 16px rgba(168, 85, 247, 0.2)";
+        card.style.background = "linear-gradient(135deg, rgba(168, 85, 247, 0.06), var(--surface-card))";
+      }
+      const info = isProprietary 
+        ? { color: "#a855f7", label: "⭐ CREACIÓN PROPIA" }
+        : (catMap[sk.category] || { color: "#f59e0b", label: (sk.category || "SKILL").toUpperCase() });
+      const initials = isProprietary ? "⭐" : (sk.category || "S").substring(0, 3).toUpperCase();
       const isActive = sk.active !== false;
       card.innerHTML = '<div class="card-header">' +
         '<div class="card-avatar" style="background:' + info.color + '22; color:' + info.color + '; font-weight:700; font-size:11px;">' + initials + '</div>' +
-        '<div class="card-meta"><span class="card-tag">' + info.label + '</span><h3 class="card-title">' + sk.name + '</h3></div>' +
+        '<div class="card-meta"><span class="card-tag" style="color:' + info.color + ';">' + info.label + '</span><h3 class="card-title">' + sk.name + '</h3></div>' +
         '<label class="switch"><input type="checkbox" class="skill-toggle" data-skill="' + sk.name + '" ' + (isActive ? 'checked' : '') + '><span class="slider"></span></label>' +
         '</div>' +
         '<p class="card-desc">' + (translations[sk.name] || sk.description || "Herramienta del sistema") + '</p>' +
@@ -2793,6 +2804,99 @@ Por favor espera unos segundos mientras la IA razona y estructura el blueprint..
         else { statusEl.textContent = "DESACTIVADO"; statusEl.classList.remove("status-active"); }
       });
     });
+
+    // Iniciar listeners del Paper Modal
+    initPaperModal();
+  }
+
+  // ── MODAL DEL PAPER OFICIAL ──
+  function initPaperModal() {
+    const btnOpen = document.getElementById("btn-open-paper");
+    const btnClose = document.getElementById("btn-close-paper");
+    const modal = document.getElementById("paper-modal");
+    const content = document.getElementById("paper-content");
+
+    if (btnOpen && modal) {
+      btnOpen.onclick = function() {
+        modal.style.display = "flex";
+        if (content && !content.getAttribute("data-loaded")) {
+          content.innerHTML = getPaperHtml();
+          content.setAttribute("data-loaded", "true");
+        }
+      };
+    }
+    if (btnClose && modal) {
+      btnClose.onclick = function() {
+        modal.style.display = "none";
+      };
+    }
+    if (modal) {
+      modal.onclick = function(e) {
+        if (e.target === modal) modal.style.display = "none";
+      };
+    }
+  }
+
+  function getPaperHtml() {
+    return `
+      <div style="max-width: 820px; margin: 0 auto;">
+        <div style="border-bottom: 2px solid rgba(168,85,247,0.3); padding-bottom: 16px; margin-bottom: 20px;">
+          <h1 style="font-size: 22px; font-weight: 800; color: #a855f7; margin: 0 0 6px 0;">GHS AUTONOMOUS CORE & HERMES OS</h1>
+          <h2 style="font-size: 15px; font-weight: 600; color: var(--ink-muted); margin: 0 0 12px 0;">Registro Oficial de Propiedad Intelectual, Arquitectura e Innovaciones Propias</h2>
+          <div style="display: flex; flex-wrap: wrap; gap: 8px; font-size: 11.5px;">
+            <span style="background: rgba(168,85,247,0.12); color: #a855f7; padding: 3px 8px; border-radius: 6px; font-weight: 700;">Autor: Jesus Peralta</span>
+            <span style="background: rgba(16,185,129,0.12); color: #10b981; padding: 3px 8px; border-radius: 6px; font-weight: 700;">Estado: En Producción</span>
+            <span style="background: rgba(59,130,246,0.12); color: #3b82f6; padding: 3px 8px; border-radius: 6px; font-weight: 700;">Runtime: Windows OS + Render</span>
+          </div>
+        </div>
+
+        <h3 style="color: #a855f7; font-size: 16px; border-left: 3px solid #a855f7; padding-left: 10px; margin-top: 24px;">1. Declaración de Visión y Propósito</h3>
+        <p>A diferencia de los chatbots convencionales o extensiones pasivas, <strong>GHS</strong> es una plataforma de ejecución agéntica de circuito cerrado (<em>Closed-Loop Autonomous Agent</em>) capaz de operar directamente sobre el sistema operativo Windows, auditar visualmente las aplicaciones que crea, auto-corregir sus propios errores de compilación, trabajar en segundo plano sin dormirse y preservar la soberanía y privacidad del usuario.</p>
+
+        <h3 style="color: #a855f7; font-size: 16px; border-left: 3px solid #a855f7; padding-left: 10px; margin-top: 24px;">2. Catálogo de Superpoderes Propietarios</h3>
+        <div style="display: grid; gap: 14px; margin-top: 14px;">
+          
+          <div style="background: var(--surface-subtle); border: 1px solid var(--border-stone); border-radius: 8px; padding: 14px;">
+            <strong style="color: #a855f7; font-size: 14px;">⚡ hermes_batch_scaffold (Scaffolding Atómico 1-Turno)</strong>
+            <p style="margin: 6px 0 0 0; font-size: 13px;">Genera de forma instantánea todo el andamiaje determinista de un proyecto (package.json, tsconfig.json, vite.config.ts, tailwind.config.js, index.html) en un único turno de 50 milisegundos con verificación previa de sintaxis JSON. Elimina el 70% de tokens y previene el colapso de inferencia por conversaciones extensas.</p>
+          </div>
+
+          <div style="background: var(--surface-subtle); border: 1px solid var(--border-stone); border-radius: 8px; padding: 14px;">
+            <strong style="color: #10b981; font-size: 14px;">🛡️ hermes_terminal con Auto-Cura de Rutas Windows</strong>
+            <p style="margin: 6px 0 0 0; font-size: 13px;">Interceptor transparente en el backend que auto-corrige rutas con comillas simples (convierte <code>cd 'C:\\...'</code> en <code>cd /d "C:\\..."</code>) y auto-detecta comandos PowerShell envolviéndolos en subshells bypass. Cero errores de sintaxis en la terminal.</p>
+          </div>
+
+          <div style="background: var(--surface-subtle); border: 1px solid var(--border-stone); border-radius: 8px; padding: 14px;">
+            <strong style="color: #f43f5e; font-size: 14px;">🎨 Skill threejs-worldclass-offline (Zero-Suspense 3D)</strong>
+            <p style="margin: 6px 0 0 0; font-size: 13px;">Manual de criterio técnico que prohíbe terminantemente presets remotos de Drei (&lt;Environment preset="..." /&gt;) que cuelgan la pantalla en blanco en Chrome Headless o sin conexión. Enseña fórmulas procedurales adaptables a arquitectura, producto o sci-fi.</p>
+          </div>
+
+          <div style="background: var(--surface-subtle); border: 1px solid var(--border-stone); border-radius: 8px; padding: 14px;">
+            <strong style="color: #a855f7; font-size: 14px;">🌙 Modo Segundo Plano Infinito (Anti-Sleep Engine)</strong>
+            <p style="margin: 6px 0 0 0; font-size: 13px;">Micro-oscilador de audio inaudible (frecuencia 0, ganancia 0.00001) y bypass de <code>document.hidden</code> en la extensión GHS. El navegador clasifica el proceso como multimedia activo y nunca estrangula temporizadores al minimizar o cambiar de pestaña.</p>
+          </div>
+
+          <div style="background: var(--surface-subtle); border: 1px solid var(--border-stone); border-radius: 8px; padding: 14px;">
+            <strong style="color: #3b82f6; font-size: 14px;">👁️ hermes_ui_inspect (Auditoría Visual de Circuito Cerrado)</strong>
+            <p style="margin: 6px 0 0 0; font-size: 13px;">Instancias Headless de Chrome que analizan el DOM y las DevTools en busca de pantallas rojas (Vite HTTP 500, PostCSS). Si detecta un fallo, devuelve el error exacto a la IA para auto-parchar antes de entregar.</p>
+          </div>
+
+          <div style="background: var(--surface-subtle); border: 1px solid var(--border-stone); border-radius: 8px; padding: 14px;">
+            <strong style="color: #f59e0b; font-size: 14px;">🧠 Memoria Permanente Cifrada (Fernet AES-128) + Filtro Anti-PII</strong>
+            <p style="margin: 6px 0 0 0; font-size: 13px;">Capa triple de memoria persistente en reposo cifrada en disco, combinada con un filtro en tiempo real que enmascara rutas de Windows (~/Downloads) evitando bloqueos de seguridad por datos sensibles.</p>
+          </div>
+
+        </div>
+
+        <h3 style="color: #a855f7; font-size: 16px; border-left: 3px solid #a855f7; padding-left: 10px; margin-top: 24px;">3. Arquitectura de Despliegue Dual</h3>
+        <p>El sistema se distribuye de forma sincronizada entre:</p>
+        <ul style="padding-left: 20px;">
+          <li><strong>Repositorio 1 (myxtensionghs):</strong> Código fuente de la extensión cliente y runtime local.</li>
+          <li><strong>Repositorio 2 (ghs-cloud-backend):</strong> Servidor MCP y backend agéntico desplegado en Render (https://ghs-cloud-backend.onrender.com).</li>
+          <li><strong>Hub Local de Producción (GHS-Proyecto-Final):</strong> Entorno de ejecución en segundo plano para control de Windows.</li>
+        </ul>
+      </div>
+    `;
   }
 
 
