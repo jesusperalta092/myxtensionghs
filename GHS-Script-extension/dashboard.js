@@ -54,6 +54,14 @@
         btn.classList.add("active");
         const targetPane = document.getElementById(`pane-${tab}`);
         if (targetPane) targetPane.classList.add("active");
+        if (tab === "mcp" && ws && ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({
+            type: "call_tool",
+            id: "skills_list_init",
+            name: "hermes_skills_list",
+            arguments: {}
+          }));
+        }
       });
     });
   }
@@ -187,6 +195,21 @@
       if (msg.id && msg.id.startsWith("toggle_") && msg.text) {
         appendLog(`[SKILL] ${msg.text}`);
         return;
+      }
+      // ── AUTO-REFRESH ON SKILL SAVE / EVOLVE ──
+      const toolOutStr = typeof msg.text === "string" ? msg.text : (msg.content && msg.content[0] ? msg.content[0].text : "");
+      if (toolOutStr && (toolOutStr.includes('"action": "upgraded"') || toolOutStr.includes('"action": "created"') || (toolOutStr.includes("Skill '") && toolOutStr.includes("potenciada")))) {
+        appendLog("[SKILLS] Detectada actualización o creación de skill. Refrescando catálogo...");
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          setTimeout(() => {
+            ws.send(JSON.stringify({
+              type: "call_tool",
+              id: "skills_list_init",
+              name: "hermes_skills_list",
+              arguments: {}
+            }));
+          }, 400);
+        }
       }
       appendLog(`[TOOL RESULT] ${msg.id}: ${JSON.stringify(msg.text || msg.error || "").slice(0, 120)}`);
       if (msg.images && msg.images.length > 0) {
@@ -2805,8 +2828,33 @@ Por favor espera unos segundos mientras la IA razona y estructura el blueprint..
       });
     });
 
-    // Iniciar listeners del Paper Modal
+    // Iniciar listeners del Paper Modal y botón de refresco
     initPaperModal();
+    wireRefreshSkillsBtn();
+  }
+
+  function wireRefreshSkillsBtn() {
+    const btn = document.getElementById("btn-refresh-skills");
+    if (btn && !btn.hasAttribute("data-wired")) {
+      btn.setAttribute("data-wired", "true");
+      btn.addEventListener("click", () => {
+        btn.textContent = "🔄 Actualizando...";
+        btn.disabled = true;
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({
+            type: "call_tool",
+            id: "skills_list_init",
+            name: "hermes_skills_list",
+            arguments: {}
+          }));
+          appendLog("[SKILLS] Consultando catálogo de habilidades en vivo del disco...");
+        }
+        setTimeout(() => {
+          btn.textContent = "🔄 Refrescar Arsenal";
+          btn.disabled = false;
+        }, 1200);
+      });
+    }
   }
 
   // ── MODAL DEL PAPER OFICIAL ──

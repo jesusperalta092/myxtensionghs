@@ -2273,6 +2273,163 @@ def _tool_toggle_skill(arguments: Dict[str, Any]) -> Dict[str, Any]:
         return {"content": [{"type": "text", "text": f"Error: {e}"}], "isError": True}
 
 
+def _tool_skill_save(arguments: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Crea o auto-mejora (evoluciona) una habilidad especializada (Skill) en el cerebro persistente del agente.
+    - Si la skill ya existe: la actualiza y potencia en su archivo original sin crear duplicados.
+    - Si la skill es inédita: la crea en la categoría correspondiente dentro de SKILLS_DIR.
+    Invalida la caché del runtime de Hermes para que quede activa de inmediato en vivo.
+    """
+    raw_name = str(arguments.get("name", "")).strip().lower()
+    content = str(arguments.get("content", "")).strip()
+    description = str(arguments.get("description", "")).strip()
+    category = str(arguments.get("category", "")).strip()
+    triggers = arguments.get("triggers", [])
+    mode = str(arguments.get("mode", "auto")).strip().lower()
+    changelog = str(arguments.get("changelog", "")).strip()
+
+    if not raw_name:
+        return {"content": [{"type": "text", "text": "Error: 'name' es requerido para guardar una skill."}], "isError": True}
+    if not content:
+        return {"content": [{"type": "text", "text": "Error: 'content' es requerido con las instrucciones técnicas de la skill."}], "isError": True}
+
+    # Sanitizar nombre a formato kebab-case
+    clean_name = re.sub(r"[^a-z0-9_\-]+", "-", raw_name).strip("-")
+    if not clean_name:
+        clean_name = f"skill-{int(time.time())}"
+
+    skills_base = get_hermes_base_dir()
+    skills_root = os.path.join(skills_base, "skills")
+    os.makedirs(skills_root, exist_ok=True)
+
+    # 1. Buscar si la skill ya existe en alguna subcarpeta (Detección de Skill Existente para evitar duplicados)
+    existing_skill_file = None
+    existing_category = None
+    
+    for root, dirs, files in os.walk(skills_root):
+        if "SKILL.md" in files:
+            folder_name = os.path.basename(root)
+            if folder_name.lower() == clean_name:
+                existing_skill_file = os.path.join(root, "SKILL.md")
+                rel = os.path.relpath(root, skills_root)
+                parts = rel.split(os.sep)
+                if len(parts) > 1:
+                    existing_category = parts[0]
+                break
+
+    # Modo control
+    if mode == "create" and existing_skill_file:
+        return {
+            "content": [{
+                "type": "text",
+                "text": f"AVISO ANTI-DUPLICADOS: La skill '{clean_name}' ya existe en '{existing_skill_file}'. Para evitar duplicar habilidades y confundir al agente, usa mode='upgrade' o mode='auto' para potenciarla en sitio."
+            }],
+            "isError": True
+        }
+
+    action_type = "upgraded" if existing_skill_file else "created"
+
+    if existing_skill_file and mode in ("auto", "upgrade"):
+        target_path = existing_skill_file
+        target_dir = os.path.dirname(existing_skill_file)
+        final_category = existing_category or category or "custom"
+
+        # Leer archivo existente para conservar metadata previa si no se especificó nueva
+        try:
+            with open(existing_skill_file, "r", encoding="utf-8", errors="replace") as ef:
+                old_text = ef.read()
+        except Exception:
+            old_text = ""
+
+        # Extraer descripción anterior si no se pasó una nueva
+        if not description and old_text:
+            m_desc = re.search(r"^description:\s*(.+)$", old_text, re.MULTILINE)
+            if m_desc:
+                description = m_desc.group(1).strip().strip('"').strip("'")
+
+        # Fusionar triggers anteriores con nuevos
+        existing_triggers = []
+        if old_text and "triggers:" in old_text:
+            t_block = re.findall(r"^\s*-\s*(.+)$", old_text, re.MULTILINE)
+            if t_block:
+                existing_triggers = [t.strip().strip('"').strip("'") for t in t_block]
+
+        all_triggers = list(dict.fromkeys(existing_triggers + [str(t).strip() for t in triggers if str(t).strip()]))
+        if not all_triggers:
+            all_triggers = [clean_name, clean_name.replace("-", " ")]
+
+        # Componer contenido potenciado
+        if content.startswith("#"):
+            body_markdown = content
+        else:
+            body_parts = old_text.split("---", 2)
+            old_body = body_parts[2].strip() if len(body_parts) >= 3 else old_text
+            timestamp_str = time.strftime("%Y-%m-%d %H:%M")
+            update_header = f"\n\n## 🔄 Actualización & Lecciones Aprendidas ({timestamp_str})\n"
+            if changelog:
+                update_header += f"> **Mejora:** {changelog}\n\n"
+            body_markdown = old_body + update_header + content
+
+    else:
+        final_category = category or "custom"
+        target_dir = os.path.join(skills_root, final_category, clean_name)
+        os.makedirs(target_dir, exist_ok=True)
+        target_path = os.path.join(target_dir, "SKILL.md")
+        all_triggers = [str(t).strip() for t in triggers if str(t).strip()]
+        if not all_triggers:
+            all_triggers = [clean_name, clean_name.replace("-", " ")]
+        body_markdown = content if content.startswith("#") else f"# {clean_name.replace('-', ' ').title()}\n\n{content}"
+
+    if not description:
+        description = f"Habilidad especializada para {clean_name.replace('-', ' ')}."
+
+    triggers_yaml = "\n".join([f"  - {t}" for t in all_triggers[:12]])
+    full_skill_text = (
+        "---\n"
+        f"name: {clean_name}\n"
+        f"description: \"{description.replace(chr(34), '')}\"\n"
+        f"category: {final_category}\n"
+        f"version: 2.0.0\n"
+        f"author: Hermes Autonomous Agent\n"
+        f"triggers:\n{triggers_yaml}\n"
+        "---\n\n"
+        f"{body_markdown.strip()}\n"
+    )
+
+    try:
+        with open(target_path, "w", encoding="utf-8") as f:
+            f.write(full_skill_text)
+    except Exception as ex:
+        return {"content": [{"type": "text", "text": f"Error al escribir archivo de skill en '{target_path}': {ex}"}], "isError": True}
+
+    # Invalidate cache
+    try:
+        import sys
+        if "tools.skills_tool" in sys.modules:
+            sk_mod = sys.modules["tools.skills_tool"]
+            if hasattr(sk_mod, "_SKILLS_CACHE"):
+                sk_mod._SKILLS_CACHE.clear()
+    except Exception:
+        pass
+
+    result_payload = {
+        "success": True,
+        "action": action_type,
+        "name": clean_name,
+        "category": final_category,
+        "path": target_path,
+        "bytes": len(full_skill_text),
+        "triggers_count": len(all_triggers),
+        "message": (
+            f"✓ Skill '{clean_name}' potenciada y actualizada exitosamente en '{target_path}' (sin duplicados)."
+            if action_type == "upgraded"
+            else f"✓ Nueva Skill '{clean_name}' creada exitosamente en '{target_path}'."
+        )
+    }
+
+    return {"content": [{"type": "text", "text": json.dumps(result_payload, indent=2, ensure_ascii=False)}]}
+
+
 def _tool_memory(arguments: Dict[str, Any]) -> Dict[str, Any]:
     import sqlite3
     action = arguments.get("action", "context")  # default = context para forzar carga al inicio
@@ -2744,6 +2901,46 @@ TOOLS = [
                 }
             },
             "required": ["name"]
+        }
+    },
+    {
+        "name": "hermes_skill_save",
+        "description": "Crea o auto-mejora (evoluciona) una habilidad especializada (Skill) en el cerebro persistente del agente. Si la skill ya existe, la actualiza y potencia en su archivo original sin duplicados. Si no existe, la crea con su frontmatter YAML y procedimientos técnicos.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "description": "Nombre canónico en kebab-case de la skill (ej: 'threejs-worldclass-offline', 'react-state-architecture', 'systematic-debugging')."
+                },
+                "content": {
+                    "type": "string",
+                    "description": "Contenido completo de la skill en Markdown, o las nuevas instrucciones, reglas anti-patrones y casos límite para potenciar la existente."
+                },
+                "description": {
+                    "type": "string",
+                    "description": "Descripción concisa de qué hace la skill y en qué circunstancias debe activarse."
+                },
+                "category": {
+                    "type": "string",
+                    "description": "Categoría opcional ('software-development', 'creative', 'devops', 'productivity', 'research', 'custom'). Por defecto: 'custom' o la categoría de la skill existente."
+                },
+                "triggers": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Lista de palabras clave o situaciones que deben detonar esta skill."
+                },
+                "mode": {
+                    "type": "string",
+                    "enum": ["auto", "upgrade", "create"],
+                    "description": "'auto' (recomendado: actualiza si existe, crea si no existe), 'upgrade' (fuerza actualización de skill existente), 'create' (crea nueva)."
+                },
+                "changelog": {
+                    "type": "string",
+                    "description": "Resumen breve opcional de qué aprendizaje, fix o mejora se añadió."
+                }
+            },
+            "required": ["name", "content"]
         }
     },
     {
@@ -3317,6 +3514,8 @@ def main():
                     res = _tool_skills_list(args)
                 elif name == "hermes_skill_view":
                     res = _tool_skill_view(args)
+                elif name in ("hermes_skill_save", "hermes_skill_create", "hermes_skill_evolve"):
+                    res = _tool_skill_save(args)
                 elif name == "hermes_tools_list":
                     res = _tool_tools_list(args)
                 elif name == "hermes_run_tool":

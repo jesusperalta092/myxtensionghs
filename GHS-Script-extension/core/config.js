@@ -22,7 +22,7 @@ const ZS = (() => {
   //   read | edit | screen | generate | roblox | swarm | tool
   function toolCategory(name) {
     const n = (name || "").includes("/") ? name.split("/").pop() : (name || "");
-    if (/^(delegate_task|mission_complete|task_report|hermes_memory|hermes_skills_list|hermes_skill_manage)$/.test(n)) return "swarm";
+    if (/^(delegate_task|mission_complete|task_report|hermes_memory|hermes_skills_list|hermes_skill_manage|hermes_skill_save|hermes_skill_create|hermes_skill_evolve)$/.test(n)) return "swarm";
     if (n === "list_commands" || n === "list_tools" || n === "hermes_tools_list") return "read";
     if (/^(script_read|script_search|script_grep|search_game_tree|inspect_instance|get_studio_state|get_console_output|search_creator_store|list_roblox_studios|hermes_file_read|hermes_skill_view|hermes_web_search|hermes_web_extract|hermes_stealth_scrape|hermes_prospect_scrape)$/.test(n))
       return "read";
@@ -297,6 +297,8 @@ Cuando uses hermes_ui_inspect sobre un proyecto React/Vite y el resultado conten
 5. PROHIBIDO ABSOLUTO: Reescribir archivos que NO son el archivo faltante. Reescribir App.tsx. Ignorar el error. Recargar la pagina sin haber creado el archivo faltante.
 
 ━━━ FIN AUTO-CARGA DE SKILLS ━━━
+- hermes_skill_save: Crea o auto-mejora (evoluciona) una habilidad en el cerebro persistente. Si la skill ya existe, la actualiza y potencia en sitio sin duplicados.
+- hermes_batch_scaffold: Creación atómica de esqueletos de proyecto en 1 solo turno de 50ms.
 - hermes_stealth_scrape: Scraping web avanzado sin bloqueos con navegador Chrome real.
 - hermes_project_clean: Organización de carpetas de proyecto y limpieza de archivos temporales/basura.
 - hermes_tools_list / list_tools: Listar todas las herramientas disponibles en el arsenal.
@@ -306,6 +308,12 @@ Cuando uses hermes_ui_inspect sobre un proyecto React/Vite y el resultado conten
 - hermes_file_patch: Editar bloques de texto dentro de archivos existentes.
 - hermes_execute_code: Ejecutar código Python interactivo directamente en Windows.
 - hermes_computer_use: Automatización de escritorio (captura de pantalla, clics, teclas).
+
+━━━ 🧠 REGLA DE AUTO-EVOLUCIÓN DE SKILLS (ANTI-DUPLICADOS) ━━━
+Cuando descubras una técnica nueva, soluciones un bug complejo o crees una arquitectura reutilizable:
+1. NUNCA crees duplicados de skills existentes (ej: NO crees threejs-fix o web-design-v2).
+2. Usa 'hermes_skill_save' con 'mode': 'auto' o 'upgrade' para POTENCIAR la skill existente en su archivo original.
+3. Si el conocimiento es totalmente inédito y no existe ninguna skill afín, crea una nueva con 'hermes_skill_save'.
 
 ━━━ FORMATO OBLIGATORIO DE COMANDOS ━━━
 Escribe SIEMPRE un bloque de código JSON con tu comando (solo uno por turno):

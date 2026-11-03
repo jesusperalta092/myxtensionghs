@@ -1,0 +1,1091 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <link rel="icon" type="image/png" href="icon-48.png">
+  <link rel="shortcut icon" type="image/png" href="icon-48.png">
+
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GHS Mission Control - Centro de Mando Universal</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="dashboard.css">
+  
+</head>
+<body class="atelier-theme">
+  <!-- Top Navigation Bar -->
+  <header class="top-nav">
+    <div class="brand-area">
+      <!-- Isotipo SVG custom: Hexagono Hub con 3 nodos orbitales -->
+      <svg class="nav-logo-svg" viewBox="0 0 44 44" xmlns="http://www.w3.org/2000/svg" aria-label="GHS Logo">
+        <!-- Hexagono abierto (el Hub) -->
+        <path d="M22 3 L38 12 L38 32 L22 41 L6 32 L6 12 Z" 
+              fill="none" stroke="#C2572C" stroke-width="2.2" stroke-linejoin="round"/>
+        <!-- Nodo central (nucleo) -->
+        <circle cx="22" cy="22" r="4.5" fill="#C2572C"/>
+        <!-- Nodos orbitales (los 3 agentes) -->
+        <circle cx="22" cy="8" r="2.5" fill="#1a1a1a"/>
+        <circle cx="33" cy="28" r="2.5" fill="#1a1a1a"/>
+        <circle cx="11" cy="28" r="2.5" fill="#1a1a1a"/>
+        <!-- Conexiones del nucleo a los agentes -->
+        <line x1="22" y1="17.5" x2="22" y2="10.5" stroke="#C2572C" stroke-width="1.2" opacity="0.6"/>
+        <line x1="25.8" y1="24" x2="31" y2="27" stroke="#C2572C" stroke-width="1.2" opacity="0.6"/>
+        <line x1="18.2" y1="24" x2="13" y2="27" stroke="#C2572C" stroke-width="1.2" opacity="0.6"/>
+        <!-- Acento brillante -->
+        <circle cx="38" cy="12" r="2" fill="#C2572C" opacity="0.9"/>
+      </svg>
+      <div class="brand-text">
+        <span class="brand-title">GHS <span class="brand-badge">MISSION CONTROL</span></span>
+        <span class="brand-subtitle">Centro de Mando de Agentes Autónomos</span>
+      </div>
+    </div>
+    
+    <div class="bridge-status-badge" id="bridge-status-pill">
+      <span class="status-dot pulsing" id="status-dot"></span>
+      <span class="status-label" id="status-text">Conectando con el Puente (ws://127.0.0.1:17613)...</span>
+    </div>
+
+    <div class="top-dev-server-badge" id="top-dev-server-badge" title="Servidores web de desarrollo activos en Windows. Clic para ver detalles.">
+      <span class="status-dot" id="server-status-dot" style="background: #94a3b8;"></span>
+      <span id="top-servers-label">0 Servidores Web</span>
+    </div>
+
+    <div class="top-dev-server-badge" id="top-bg-badge" style="cursor: pointer;" title="Modo Segundo Plano (Anti-Sleep): Permite al agente seguir trabajando sin detenerse aunque minimices la ventana o cambies de pestaña. Clic para alternar.">
+      <span class="status-dot pulsing" id="bg-status-dot" style="background: #a855f7;"></span>
+      <span id="top-bg-label">2do Plano: ON</span>
+    </div>
+
+    <div class="nav-quick-actions">
+      <button class="action-btn" id="btn-refresh" title="Refrescar estado"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.3"/></svg> Refrescar</button>
+      <button class="action-btn danger-btn" id="btn-emergency-stop" title="Botón de Pánico: Detener toda acción del agente en el PC">🛑 Parada de Emergencia</button>
+    </div>
+  </header>
+
+  <div class="app-layout">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <nav class="nav-menu">
+        <button class="nav-item active" data-tab="mcp">
+          <span class="nav-icon">⚡</span>
+          <span class="nav-label">Superpoderes & Skills</span>
+          <span class="nav-counter" id="mcp-count">82</span>
+        </button>
+        <button class="nav-item" data-tab="playbooks">
+          <span class="nav-icon">🧠</span>
+          <span class="nav-label">Cerebro & Playbooks</span>
+          <span class="nav-counter" id="playbook-count">2</span>
+        </button>
+        <button class="nav-item" data-tab="batch">
+          <span class="nav-icon">📊</span>
+          <span class="nav-label">Pipeline de Lotes</span>
+          <span class="nav-counter" id="batch-count">0</span>
+        </button>
+        <button class="nav-item" data-tab="swarm">
+          <span class="nav-icon">🐝</span>
+          <span class="nav-label">Enjambre Multi-Agente</span>
+          <span class="nav-counter" id="nav-session-counter" style="display: none; background: rgba(16, 185, 129, 0.15); color: #10b981; font-weight: 700;">ACTIVA</span>
+        </button>
+        <button class="nav-item" data-tab="agent-brain" style="display: none !important;">
+          <span class="nav-icon">🧠</span>
+          <span class="nav-label">Cerebro del Agente</span>
+        </button>
+        <button class="nav-item" data-tab="projects">
+          <span class="nav-icon">🚀</span>
+          <span class="nav-label">Proyectos & Red</span>
+        </button>
+        <button class="nav-item" data-tab="servers" id="nav-item-servers">
+          <span class="nav-icon">🌐</span>
+          <span class="nav-label">Servidores en Vivo</span>
+          <span class="nav-counter" id="nav-servers-counter" style="background: rgba(16, 185, 129, 0.15); color: #10b981; font-weight: 700;">0</span>
+        </button>
+        <button class="nav-item" data-tab="desktop">
+          <span class="nav-icon">🖥️</span>
+          <span class="nav-label">Operador de Escritorio</span>
+        </button>
+        <button class="nav-item" data-tab="logs">
+          <span class="nav-icon">📜</span>
+          <span class="nav-label">Consola de Logs</span>
+        </button>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="footer-brand-row">
+          <svg class="footer-logo-mini" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+            <path d="M12 2 L21 7 L21 17 L12 22 L3 17 L3 7 Z" fill="none" stroke="#C2572C" stroke-width="1.5" stroke-linejoin="round"/>
+            <circle cx="12" cy="12" r="2" fill="#C2572C"/>
+          </svg>
+          <div class="footer-brand-info">
+            <span class="footer-brand-name">GHS</span>
+            <span class="footer-brand-version">v1.5.5</span>
+          </div>
+        </div>
+        <div class="footer-divider"></div>
+        <div class="footer-metrics">
+          <div class="footer-metric">
+            <span class="footer-metric-label">Latencia</span>
+            <span class="footer-metric-value" id="bridge-latency">&lt; 1 ms</span>
+          </div>
+          <div class="footer-metric">
+            <span class="footer-metric-label">Workspace</span>
+            <span class="footer-metric-value" id="workspace-label">~/Downloads</span>
+          </div>
+        </div>
+        <div class="footer-credit">
+          <span>Powered by Hermes Agent</span>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main Content Area -->
+    <main class="content-area">
+      
+      <!-- 1. TAB: SUPERPODERES MCP -->
+      <section class="tab-pane active" id="pane-mcp">
+        <div class="pane-header">
+          <div>
+            <h1 class="pane-title">⚡ Catálogo de Superpoderes & Skills Hermes</h1>
+            <p class="pane-desc">Activa o desactiva habilidades locales con 1 clic. El puente y la IA se actualizan en vivo.</p>
+            <div id="mcp-stats-pill" style="display:flex; flex-wrap:wrap; gap:8px; margin-top:8px;">
+              <span id="mcp-stat-servers" style="background:rgba(16,185,129,0.12); color:#10b981; border:1px solid rgba(16,185,129,0.25); padding:3px 10px; border-radius:6px; font-size:12px; font-weight:700;">🟢 9 Servidores MCP</span>
+              <span id="mcp-stat-tools" style="background:rgba(59,130,246,0.12); color:#3b82f6; border:1px solid rgba(59,130,246,0.25); padding:3px 10px; border-radius:6px; font-size:12px; font-weight:700;">⚡ 164 Herramientas MCP</span>
+              <span id="mcp-stat-skills" style="background:rgba(245,158,11,0.12); color:#f59e0b; border:1px solid rgba(245,158,11,0.25); padding:3px 10px; border-radius:6px; font-size:12px; font-weight:700;">🧠 82 Skills Activas</span>
+            </div>
+          </div>
+          <button class="btn-primary" id="btn-reload-mcp">⟳ Recargar Servidores</button>
+        </div>
+
+        <!-- SECCIÓN DESTACADA: SUPERPODERES PROPIETARIOS -->
+        <div class="proprietary-banner" style="margin-bottom: 24px; background: linear-gradient(135deg, rgba(124, 58, 237, 0.08) 0%, rgba(59, 130, 246, 0.05) 100%); border: 1px solid rgba(168, 85, 247, 0.35); border-radius: var(--radius-lg); padding: 18px 22px; box-shadow: 0 4px 20px rgba(168, 85, 247, 0.07);">
+          <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-bottom: 16px;">
+            <div style="display: flex; align-items: center; gap: 12px;">
+              <div style="width: 42px; height: 42px; border-radius: 10px; background: linear-gradient(135deg, #7c3aed, #a855f7); display: flex; align-items: center; justify-content: center; font-size: 20px; box-shadow: 0 4px 12px rgba(168, 85, 247, 0.4);">⭐</div>
+              <div>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                  <h2 style="font-size: 16px; font-weight: 800; color: var(--ink-base); margin: 0;">Superpoderes & Habilidades Propietarias</h2>
+                  <span style="background: linear-gradient(135deg, #7c3aed, #a855f7); color: #fff; font-size: 10px; font-weight: 800; padding: 2px 8px; border-radius: 12px; letter-spacing: 0.5px; text-transform: uppercase;">CREACIÓN PROPIA</span>
+                </div>
+                <p style="font-size: 12px; color: var(--ink-muted); margin: 3px 0 0 0;">
+                  Arquitectura exclusiva desarrollada por nosotros: Scaffolding Atómico 1-turno, Terminal Auto-Cura, Auditoría Visual y Anti-Sleep.
+                </p>
+              </div>
+            </div>
+            <button class="btn-secondary" id="btn-open-paper" style="display: inline-flex; align-items: center; gap: 6px; font-weight: 700; color: #a855f7; border-color: rgba(168,85,247,0.4); background: rgba(168,85,247,0.08);">
+              📄 Ver Paper Oficial
+            </button>
+          </div>
+
+          <!-- Grid de Poderes Propietarios -->
+          <div class="cards-grid" id="proprietary-powers-grid" style="grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px;">
+            <!-- Card 1: Batch Scaffold -->
+            <div class="power-card" style="border: 1px solid rgba(168, 85, 247, 0.3); background: var(--surface-card);">
+              <div class="card-header">
+                <div class="card-avatar" style="background: rgba(168, 85, 247, 0.15); color: #a855f7; font-weight: 800; font-size: 13px;">⚡</div>
+                <div class="card-meta">
+                  <span class="card-tag" style="color: #a855f7;">HERRAMIENTA LOCAL</span>
+                  <h3 class="card-title">hermes_batch_scaffold</h3>
+                </div>
+                <span style="font-size: 10px; font-weight: 800; background: rgba(16, 185, 129, 0.15); color: #10b981; padding: 2px 6px; border-radius: 4px;">1 TURNO</span>
+              </div>
+              <p class="card-desc">Crea esqueletos completos de proyectos (package.json, tsconfig, vite, etc.) en 1 solo turno de 50ms con validación previa de JSON. Elimina el 70% de tokens y el lag de 20 turnos.</p>
+              <div class="card-footer">
+                <span class="card-status status-active">ACTIVO EN MOTOR</span>
+                <span class="card-tools-badge" style="background: rgba(168, 85, 247, 0.1); color: #a855f7; font-weight: 700;">PROPIETARIO</span>
+              </div>
+            </div>
+
+            <!-- Card 2: Terminal Auto-Cura -->
+            <div class="power-card" style="border: 1px solid rgba(168, 85, 247, 0.3); background: var(--surface-card);">
+              <div class="card-header">
+                <div class="card-avatar" style="background: rgba(16, 185, 129, 0.15); color: #10b981; font-weight: 800; font-size: 13px;">🛡️</div>
+                <div class="card-meta">
+                  <span class="card-tag" style="color: #10b981;">TERMINAL BLINDADA</span>
+                  <h3 class="card-title">hermes_terminal (Auto-Cura)</h3>
+                </div>
+                <span style="font-size: 10px; font-weight: 800; background: rgba(16, 185, 129, 0.15); color: #10b981; padding: 2px 6px; border-radius: 4px;">AUTO-FIX</span>
+              </div>
+              <p class="card-desc">Interceptor transparente de sintaxis Windows: reescribe automáticamente <code>cd 'C:\...'</code> en <code>cd /d "..."</code> y detecta cmdlets PowerShell envolviéndolos sin error.</p>
+              <div class="card-footer">
+                <span class="card-status status-active">ACTIVO EN MOTOR</span>
+                <span class="card-tools-badge" style="background: rgba(16, 185, 129, 0.1); color: #10b981; font-weight: 700;">PROPIETARIO</span>
+              </div>
+            </div>
+
+            <!-- Card 3: Modo 2do Plano Infinito -->
+            <div class="power-card" style="border: 1px solid rgba(168, 85, 247, 0.3); background: var(--surface-card);">
+              <div class="card-header">
+                <div class="card-avatar" style="background: rgba(168, 85, 247, 0.15); color: #a855f7; font-weight: 800; font-size: 13px;">🌙</div>
+                <div class="card-meta">
+                  <span class="card-tag" style="color: #a855f7;">ANTI-SLEEP ENGINE</span>
+                  <h3 class="card-title">Modo Segundo Plano Infinito</h3>
+                </div>
+                <span style="font-size: 10px; font-weight: 800; background: rgba(168, 85, 247, 0.15); color: #a855f7; padding: 2px 6px; border-radius: 4px;">KEEP-ALIVE</span>
+              </div>
+              <p class="card-desc">Emite un micro-pulso de audio inaudible para que el navegador no ralentice los temporizadores y anula la pausa por pestaña oculta (document.hidden). El agente nunca se duerme.</p>
+              <div class="card-footer">
+                <span class="card-status status-active">ACTIVO EN EXTENSIÓN</span>
+                <span class="card-tools-badge" style="background: rgba(168, 85, 247, 0.1); color: #a855f7; font-weight: 700;">PROPIETARIO</span>
+              </div>
+            </div>
+
+            <!-- Card 4: Skill Three.js Offline-First -->
+            <div class="power-card" style="border: 1px solid rgba(168, 85, 247, 0.3); background: var(--surface-card);">
+              <div class="card-header">
+                <div class="card-avatar" style="background: rgba(244, 63, 94, 0.15); color: #f43f5e; font-weight: 800; font-size: 13px;">🎨</div>
+                <div class="card-meta">
+                  <span class="card-tag" style="color: #f43f5e;">SKILL 3D MAESTRA</span>
+                  <h3 class="card-title">threejs-worldclass-offline</h3>
+                </div>
+                <span style="font-size: 10px; font-weight: 800; background: rgba(244, 63, 94, 0.15); color: #f43f5e; padding: 2px 6px; border-radius: 4px;">ZERO-SUSPENSE</span>
+              </div>
+              <p class="card-desc">Criterio técnico de render 3D offline: prohíbe presets remotos de CDN que congelan la pantalla en blanco y enseña iluminación procedural adaptable a arquitectura, producto o sci-fi.</p>
+              <div class="card-footer">
+                <span class="card-status status-active">ACTIVO EN SKILLS</span>
+                <span class="card-tools-badge" style="background: rgba(244, 63, 94, 0.1); color: #f43f5e; font-weight: 700;">PROPIETARIO</span>
+              </div>
+            </div>
+
+            <!-- Card 5: hermes_ui_inspect -->
+            <div class="power-card" style="border: 1px solid rgba(168, 85, 247, 0.3); background: var(--surface-card);">
+              <div class="card-header">
+                <div class="card-avatar" style="background: rgba(59, 130, 246, 0.15); color: #3b82f6; font-weight: 800; font-size: 13px;">👁️</div>
+                <div class="card-meta">
+                  <span class="card-tag" style="color: #3b82f6;">MOTOR VISUAL</span>
+                  <h3 class="card-title">hermes_ui_inspect</h3>
+                </div>
+                <span style="font-size: 10px; font-weight: 800; background: rgba(59, 130, 246, 0.15); color: #3b82f6; padding: 2px 6px; border-radius: 4px;">CIRCUITO CERRADO</span>
+              </div>
+              <p class="card-desc">Auditoría fotográfica con Chrome Headless y análisis de DevTools. Detecta pantallas rojas (Vite HTTP 500, PostCSS) y obliga a la IA a auto-reparar antes de entregar.</p>
+              <div class="card-footer">
+                <span class="card-status status-active">ACTIVO EN MOTOR</span>
+                <span class="card-tools-badge" style="background: rgba(59, 130, 246, 0.1); color: #3b82f6; font-weight: 700;">PROPIETARIO</span>
+              </div>
+            </div>
+
+            <!-- Card 6: Memoria Cifrada 3 Capas -->
+            <div class="power-card" style="border: 1px solid rgba(168, 85, 247, 0.3); background: var(--surface-card);">
+              <div class="card-header">
+                <div class="card-avatar" style="background: rgba(245, 158, 11, 0.15); color: #f59e0b; font-weight: 800; font-size: 13px;">🧠</div>
+                <div class="card-meta">
+                  <span class="card-tag" style="color: #f59e0b;">CEREBRO & PRIVACIDAD</span>
+                  <h3 class="card-title">Memoria Cifrada + Filtro Anti-PII</h3>
+                </div>
+                <span style="font-size: 10px; font-weight: 800; background: rgba(245, 158, 11, 0.15); color: #f59e0b; padding: 2px 6px; border-radius: 4px;">FERNET AES</span>
+              </div>
+              <p class="card-desc">Persistencia de SOUL, USER y MEMORY cifrados en reposo, combinados con filtro en tiempo real que enmascara rutas de Windows (~/Downloads) evitando disparar filtros de seguridad.</p>
+              <div class="card-footer">
+                <span class="card-status status-active">ACTIVO EN MOTOR</span>
+                <span class="card-tools-badge" style="background: rgba(245, 158, 11, 0.1); color: #f59e0b; font-weight: 700;">PROPIETARIO</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- DIVISOR DE CATÁLOGO GENERAL -->
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; flex-wrap: wrap; gap: 8px;">
+          <h2 style="font-size: 15px; font-weight: 700; color: var(--ink-base); margin: 0;">Catálogo General de Habilidades del Sistema</h2>
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <button id="btn-refresh-skills" class="btn-secondary" style="font-size: 11.5px; padding: 4px 12px; display: inline-flex; align-items: center; gap: 6px; cursor: pointer; border-radius: 6px; border: 1px solid var(--border-stone); background: var(--surface-card); color: var(--ink-base); font-weight: 600;">
+              🔄 Refrescar Arsenal
+            </button>
+            <span style="font-size: 12px; color: var(--ink-muted);" id="catalog-subcount">83 Skills Disponibles</span>
+          </div>
+        </div>
+
+        <div class="cards-grid" id="mcp-grid">
+        </div>
+      </section>
+
+      <!-- 2. TAB: CEREBRO & PLAYBOOKS -->
+      <section class="tab-pane" id="pane-playbooks">
+        <div class="pane-header">
+          <div>
+            <h1 class="pane-title">🧠 Memoria Permanente & Playbooks</h1>
+            <p class="pane-desc">Procedimientos Operativos Estándar (SOPs) aprendidos de tus grabaciones y lecciones de oro compartidas.</p>
+          </div>
+          <button class="btn-primary" id="btn-new-playbook">+ Crear Nuevo Playbook</button>
+        </div>
+
+        <div class="playbooks-layout">
+          <div class="playbooks-list-col">
+            <h2 class="sub-title">Procedimientos Guardados</h2>
+            <div class="playbook-cards" id="playbook-list">
+              <!-- Item 1 -->
+              <div class="playbook-item active" data-id="calificar_examenes_campus">
+                <div class="playbook-item-header">
+                  <span class="playbook-platform-pill">Campus Virtual</span>
+                  <span class="playbook-steps-pill">4 pasos</span>
+                </div>
+                <h4 class="playbook-item-title">Calificar Exámenes Campus</h4>
+                <p class="playbook-item-desc">Evaluación automática de entregas de estudiantes usando rúbrica de video.</p>
+              </div>
+
+              <!-- Item 2 -->
+              <div class="playbook-item" data-id="descargar_reportes_ventas">
+                <div class="playbook-item-header">
+                  <span class="playbook-platform-pill">Tienda / E-commerce</span>
+                  <span class="playbook-steps-pill">5 pasos</span>
+                </div>
+                <h4 class="playbook-item-title">Descargar Reportes Ventas</h4>
+                <p class="playbook-item-desc">Extracción de pedidos diarios, consolidación en CSV y reporte de métricas.</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="playbook-detail-col">
+            <div class="detail-card" id="playbook-detail-box">
+              <div class="detail-header">
+                <div>
+                  <h2 class="detail-title" id="detail-title">Calificar Exámenes Campus</h2>
+                  <p class="detail-subtitle" id="detail-desc">Procedimiento autónomo para evaluación de estudiantes en campus universitario.</p>
+                </div>
+                <button class="btn-secondary" id="btn-run-playbook">▶ Ejecutar en Chat</button>
+              </div>
+
+              <h3 class="steps-heading">Pasos del Procedimiento (SOP):</h3>
+              <ol class="steps-list" id="detail-steps">
+                <li>Abrir la pestaña con la sesión activa del Campus Virtual y acceder a la lista de tareas pendientes.</li>
+                <li>Por cada estudiante en la cola de evaluación, hacer clic en su enlace y descargar o visualizar el documento entregado.</li>
+                <li>Aplicar la rúbrica de calificación evaluando metodología, desarrollo y conclusiones (escala 0-20).</li>
+                <li>Digitar la calificación en la casilla correspondiente, insertar la retroalimentación constructiva y pulsar 'Guardar y siguiente'.</li>
+              </ol>
+
+              <div class="detail-footer">
+                <span class="meta-tag">Almacenado en: agent_brain.json</span>
+                <button class="btn-ghost danger-text" id="btn-delete-playbook">Eliminar Playbook</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 3. TAB: PIPELINE DE LOTES -->
+      <section class="tab-pane" id="pane-batch">
+        <div class="pane-header">
+          <div>
+            <h1 class="pane-title">📊 Pipeline de Lotes & Calificaciones</h1>
+            <p class="pane-desc">Gestión masiva de estudiantes, productos o tareas auditadas con deduplicación en base de datos SQLite.</p>
+          </div>
+          <div class="header-actions">
+            <button class="btn-secondary" id="btn-import-batch">📥 Cargar Lote</button>
+            <button class="btn-primary" id="btn-export-csv">📊 Exportar a CSV</button>
+          </div>
+        </div>
+
+        <div class="batch-filter-bar">
+          <input type="text" class="search-input" id="batch-search" placeholder="Buscar por nombre, ID o nota...">
+          <select class="filter-select" id="batch-filter-status">
+            <option value="all">Todos los estados</option>
+            <option value="evaluated">Calificados</option>
+            <option value="pending">Pendientes</option>
+          </select>
+          <button class="btn-ghost" id="btn-clear-batch">🗑️ Limpiar Lote</button>
+        </div>
+
+        <div class="table-container">
+          <table class="data-table" id="batch-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Nombre / Alumno</th>
+                <th>Identificador</th>
+                <th>Estado</th>
+                <th>Nota / Puntuación</th>
+                <th>Retroalimentación del Agente</th>
+                <th>Fecha</th>
+              </tr>
+            </thead>
+            <tbody id="batch-tbody">
+              <tr>
+                <td>1</td>
+                <td><strong>Juan Pérez Silva</strong></td>
+                <td><code>ALUM-2026-001</code></td>
+                <td><span class="badge-success">✅ Calificado</span></td>
+                <td><strong class="grade-text">18 / 20</strong></td>
+                <td>Excelente formulación del problema y bibliografía actualizada.</td>
+                <td>20/09/2026</td>
+              </tr>
+              <tr>
+                <td>2</td>
+                <td><strong>María García Quispe</strong></td>
+                <td><code>ALUM-2026-002</code></td>
+                <td><span class="badge-success">✅ Calificado</span></td>
+                <td><strong class="grade-text">16 / 20</strong></td>
+                <td>Desarrollo completo; se sugiere profundizar en el análisis comparativo.</td>
+                <td>20/09/2026</td>
+              </tr>
+              <tr>
+                <td>3</td>
+                <td><strong>Carlos Mendoza Ramos</strong></td>
+                <td><code>ALUM-2026-003</code></td>
+                <td><span class="badge-warning">⏳ Pendiente</span></td>
+                <td><span class="grade-text muted">-</span></td>
+                <td>En cola de procesamiento por el agente.</td>
+                <td>20/09/2026</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- 4. TAB: ENJAMBRE MULTI-AGENTE -->
+      <section class="tab-pane" id="pane-swarm">
+        <div class="pane-header">
+          <div>
+            <h1 class="pane-title">🐝 Enjambre Multi-Agente (Swarm Monitor)</h1>
+            <p class="pane-desc">Coordinación en tiempo real entre pestañas de IA: Arquitecto Estratega ➔ Obrero Técnico con poderes de PC.</p>
+          </div>
+          <span class="swarm-status-pill" id="swarm-overall-status">● Enjambre Listo (0 Arquitectos, 0 Obreros)</span>
+        </div>
+
+        <!-- Mission Launcher Card -->
+        <div class="swarm-launcher-card">
+          <div class="launcher-header">
+            <h3 class="launcher-title">
+              <span>🚀</span> Lanzador de Misiones Autónomas
+            </h3>
+            <!-- Mode Switcher Toggle -->
+            <div class="swarm-mode-selector-wrap">
+              <button id="btn-mode-allinone" class="swarm-mode-btn active">
+                <span>🐝</span> Mono-Pestaña (All-in-One)
+              </button>
+              <button id="btn-mode-distributed" class="swarm-mode-btn">
+                <span>🌐</span> Multi-Pestaña (Distribuido)
+              </button>
+            </div>
+          </div>
+          <p id="swarm-mode-explanation" class="swarm-mode-desc">
+            <strong>Modo Mono-Pestaña Activo:</strong> Todo el equipo de especialistas (Arquitecto, Obrero, Diseñador con Ojos y QA) opera dentro de <em>una sola pestaña de chat</em> (ej. Gemini o DeepSeek) alternando turnos y ejecutando herramientas locales sin saltar de pestaña.
+          </p>
+          <div class="state-ledger-banner">
+            <span>⚡</span>
+            <span><strong>Relevo Inteligente (State Ledger):</strong> El progreso se sincroniza en disco. Si una pestaña se satura, el enjambre transfiere automáticamente la misión a la siguiente pestaña disponible.</span>
+          </div>
+          <!-- GEM Agent Pipeline Toggle & Config Bar -->
+          <div class="gem-pipeline-bar">
+            <label class="gem-toggle-label">
+              <input type="checkbox" id="chk-use-gem" checked>
+              <span class="gem-label-text">
+                <span>💎</span> Modo GEM Activo: Razonar Nicho y Crear Blueprint Maestro AAA antes de Construir
+              </span>
+            </label>
+            <button id="btn-open-gem-config" class="btn-gem-config">
+              <span>⚙️ Configurar Prompt GEM</span>
+            </button>
+          </div>
+
+          <div class="mission-input-row">
+            <input type="text" id="swarm-mission-input" class="mission-input" placeholder="Escribe el objetivo para el enjambre (ej: Crea una web para una clinica dental con agenda de citas y servicios)...">
+            <button class="btn-launch-mission" id="btn-launch-mission">
+              <span>🚀 Lanzar Misión</span>
+            </button>
+          </div>
+          <div id="mission-toast" class="mission-toast" style="display: none;"></div>
+
+          <!-- Drawer del Blueprint Maestro Generado (Modo Gem) -->
+          <div id="blueprint-modal" class="blueprint-drawer" style="display: none;">
+            <div class="blueprint-header">
+              <div class="blueprint-title-wrap">
+                <span class="blueprint-icon">💎</span>
+                <span class="blueprint-title">Blueprint Maestro World-Class (Generado con IA Adaptativa)</span>
+                <span id="blueprint-pipeline-badge" class="badge-status-pill">EN CONSTRUCCIÓN</span>
+              </div>
+              <div class="blueprint-actions">
+                <button id="btn-dispatch-worker" class="btn-primary" style="background: linear-gradient(135deg, #10b981, #059669); border: none; color: #fff; font-weight: 600; padding: 6px 14px; border-radius: 8px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;">⚡ Despachar al Obrero (Gemini)</button>
+                <button id="btn-copy-blueprint" class="btn-secondary">📋 Copiar para AI Studio</button>
+                <button id="btn-close-blueprint" class="btn-ghost">✕ Minimizar</button>
+              </div>
+            </div>
+            <textarea id="blueprint-content" rows="14" class="blueprint-textarea"></textarea>
+          </div>
+
+          <!-- Modal de Configuración del Prompt del Agente GEM -->
+          <div id="gem-prompt-modal" class="modal-overlay" style="display: none;">
+            <div class="modal-container">
+              <div class="modal-header">
+                <div class="modal-title-wrap">
+                  <span class="modal-icon">💎</span>
+                  <div>
+                    <div class="modal-title">Configuración de Instrucciones del Agente GEM</div>
+                    <div class="modal-subtitle">Edita el Master Prompt que utiliza el Agente GEM para razonar y construir el Blueprint Maestro</div>
+                  </div>
+                </div>
+                <button id="btn-close-gem-modal" class="modal-close-btn">✕</button>
+              </div>
+              <div class="modal-body">
+                <div class="modal-hint">
+                  Estas instrucciones se inyectan a la IA para ejecutar las 3 fases (Diagnóstico Adaptativo, Directivas Anti-Genéricas y Blueprint de 7 Secciones). Puedes editarlas y personalizarlas:
+                </div>
+                <textarea id="gem-prompt-textarea" rows="18" class="modal-textarea"></textarea>
+              </div>
+              <div class="modal-footer">
+                <button id="btn-reset-gem-prompt" class="btn-ghost danger-text">↺ Restaurar Prompt por Defecto</button>
+                <div class="modal-actions-right">
+                  <button id="btn-cancel-gem-modal" class="btn-secondary">Cancelar</button>
+                  <button id="btn-save-gem-prompt" class="btn-primary">💾 Guardar Instrucciones</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 📂 MÓDULO MODULAR: SESIÓN DE PROYECTO ACTIVO & RELEVO DE CUOTA (ZERO-LOSS) -->
+        <div class="project-session-card" id="project-session-card">
+          <div class="session-card-header">
+            <div class="session-card-title-group">
+              <div class="session-avatar">📂</div>
+              <div>
+                <div class="session-title-row">
+                  <h3 class="session-title" id="session-proj-name">Sin Proyecto Activo</h3>
+                  <span class="session-status-badge badge-idle" id="session-status-badge">EN ESPERA</span>
+                </div>
+                <p class="session-subtitle" id="session-dir-label">Inicia una misión o configura un proyecto para activar la sesión de desarrollo.</p>
+              </div>
+            </div>
+            <div class="session-header-actions">
+              <button id="btn-session-copy-handover" class="btn-secondary" title="Copiar prompt completo de relevo para pegar en una nueva cuenta de IA">
+                📋 Copiar Prompt de Relevo
+              </button>
+              <button id="btn-session-resume-tab" class="btn-primary" title="Inyectar y transferir la sesión activa a la pestaña de IA actualmente abierta">
+                ⚡ Reanudar en Pestaña Activa
+              </button>
+              <button id="btn-session-conclude" class="btn-ghost danger-text" title="Concluir y archivar la sesión de trabajo actual sin borrar archivos">
+                ⏹️ Concluir Sesión
+              </button>
+              <button id="btn-session-reset" class="btn-ghost" title="Limpiar el panel de sesión para iniciar un nuevo proyecto desde cero">
+                🔄 Nueva Sesión Limpia
+              </button>
+            </div>
+          </div>
+
+          <div class="session-card-body" id="session-body-content" style="display: none;">
+            <div class="session-meta-grid">
+              <div class="session-meta-item">
+                <span class="meta-label">ID de Sesión:</span>
+                <span class="meta-val font-mono" id="session-id-val">-</span>
+              </div>
+              <div class="session-meta-item">
+                <span class="meta-label">Servidor Dev Web:</span>
+                <span class="meta-val" id="session-devserver-val">
+                  <span class="badge-offline">Verificando puerto...</span>
+                </span>
+              </div>
+              <div class="session-meta-item">
+                <span class="meta-label">Tiempo Transcurrido:</span>
+                <span class="meta-val" id="session-time-val">Hace 0 min</span>
+              </div>
+              <div class="session-meta-item">
+                <span class="meta-label">Subtarea en Curso:</span>
+                <span class="meta-val font-mono" id="session-subtask-val">-</span>
+              </div>
+            </div>
+
+            <!-- Barra de Progreso de Subtareas -->
+            <div class="session-progress-section">
+              <div class="progress-info-row">
+                <span class="progress-title">Progreso del Enjambre & Subtareas:</span>
+                <span class="progress-count" id="session-tasks-count">0 subtareas completadas (0%)</span>
+              </div>
+              <div class="session-progress-track">
+                <div class="session-progress-fill" id="session-progress-bar" style="width: 0%;"></div>
+              </div>
+            </div>
+
+            <!-- Lista de Tareas e Informes del Obrero -->
+            <div class="session-tasks-accordion">
+              <details id="session-tasks-details">
+                <summary class="tasks-summary">
+                  <span>📜 Ver Registro de Tareas e Informes Técnicos del Obrero</span>
+                  <span class="badge-pill" id="session-tasks-badge">0</span>
+                </summary>
+                <div class="tasks-timeline-list" id="session-tasks-list">
+                  <div class="tasks-empty-hint">Aún no se han registrado subtareas completadas.</div>
+                </div>
+              </details>
+            </div>
+          </div>
+        </div>
+
+        <!-- Detected Swarm Tabs Bar -->
+        <div class="detected-tabs-bar">
+          <div class="tabs-status-wrap">
+            <span class="tabs-bar-label">Pestañas IA Conectadas:</span>
+            <div id="swarm-tabs-container" class="tabs-pill-list">
+              <span class="tabs-searching">Buscando pestañas de IA activas...</span>
+            </div>
+          </div>
+          <button id="btn-refresh-swarm" class="btn-ghost">⟳ Refrescar</button>
+        </div>
+
+        <!-- Teatro Visual Animado (Canvas 2D) -->
+        <div class="swarm-theater-container">
+          <div class="theater-top-badge">
+            <span class="theater-badge-title">
+              <span>🎭</span> Teatro Visual del Enjambre GHS
+            </span>
+            <span id="theater-live-indicator" class="live-pill">
+              ● EN VIVO
+            </span>
+          </div>
+          <canvas id="swarm-theater-canvas" width="860" height="280"></canvas>
+        </div>
+
+        <!-- Matriz de Asignación de Herramientas y Superpoderes en Tiempo Real -->
+        <div class="agent-toolbelts-card">
+          <div class="toolbelts-header">
+            <div class="toolbelts-title-group">
+              <span class="toolbelts-icon">⚡</span>
+              <div>
+                <h3 class="toolbelts-title">
+                  Arsenal de Herramientas Asignadas por Agente en Tiempo Real
+                  <span class="toolbelts-badge">
+                    ORQUESTACIÓN EN VIVO
+                  </span>
+                </h3>
+                <p class="toolbelts-desc">
+                  Visualiza los superpoderes de Hermes y herramientas nativas que la Mente Maestra asigna a cada miembro del equipo.
+                </p>
+              </div>
+            </div>
+            <span id="toolbelts-live-status" class="toolbelts-sync">
+              <span class="sync-dot"></span>
+              Sincronizado con Puente
+            </span>
+          </div>
+
+          <div class="toolbelts-grid" id="agent-toolbelts-grid">
+            <!-- Col 1: Maestro Orquestador -->
+            <div class="toolbelt-col role-col-master">
+              <div class="toolbelt-col-header">
+                <div class="role-name-wrap">
+                  <span class="role-dot dot-master"></span>
+                  <span class="role-title">Maestro Orquestador</span>
+                </div>
+                <span id="badge-master" class="agent-state-pill pill-master">EN LÍNEA</span>
+              </div>
+              <div class="active-tool-line">
+                Acción activa: <b id="active-tool-master">En espera de misión</b>
+              </div>
+              <div class="pills-wrap" id="pills-master">
+                <span class="tool-pill">skills_list</span>
+                <span class="tool-pill">web_search</span>
+                <span class="tool-pill">tools_list</span>
+                <span class="tool-pill">dev_server</span>
+                <span class="tool-pill">memory</span>
+                <span class="tool-pill">delegate_task</span>
+              </div>
+            </div>
+
+            <!-- Col 2: GEM Builder (Prompt Master Adaptativo) -->
+            <div class="toolbelt-col role-col-gem">
+              <div class="toolbelt-col-header">
+                <div class="role-name-wrap">
+                  <span class="role-dot dot-gem"></span>
+                  <span class="role-title">💎 GEM Builder</span>
+                </div>
+                <span id="badge-gem" class="agent-state-pill pill-gem">EN ESPERA</span>
+              </div>
+              <div class="active-tool-line">
+                Acción activa: <b id="active-tool-gem">En espera de misión</b>
+              </div>
+              <div class="pills-wrap" id="pills-gem">
+                <span class="tool-pill">gem_blueprint_ready</span>
+                <span class="tool-pill">architect_planner</span>
+                <span class="tool-pill">anti_generic_audit</span>
+              </div>
+            </div>
+
+            <!-- Col 3: Arquitecto -->
+            <div class="toolbelt-col role-col-architect">
+              <div class="toolbelt-col-header">
+                <div class="role-name-wrap">
+                  <span class="role-dot dot-architect"></span>
+                  <span class="role-title">Arquitecto de Software</span>
+                </div>
+                <span id="badge-architect" class="agent-state-pill pill-architect">EN ESPERA</span>
+              </div>
+              <div class="active-tool-line">
+                Acción activa: <b id="active-tool-architect">En espera de misión</b>
+              </div>
+              <div class="pills-wrap" id="pills-architect">
+                <span class="tool-pill">web_search</span>
+                <span class="tool-pill">file_read</span>
+                <span class="tool-pill">skills_list</span>
+                <span class="tool-pill">dev_server</span>
+                <span class="tool-pill">delegate_task</span>
+              </div>
+            </div>
+
+            <!-- Col 4: Obrero FullStack -->
+            <div class="toolbelt-col role-col-worker">
+              <div class="toolbelt-col-header">
+                <div class="role-name-wrap">
+                  <span class="role-dot dot-worker"></span>
+                  <span class="role-title">Obrero FullStack</span>
+                </div>
+                <span id="badge-worker" class="agent-state-pill pill-worker">EN ESPERA</span>
+              </div>
+              <div class="active-tool-line">
+                Acción activa: <b id="active-tool-worker">En espera de misión</b>
+              </div>
+              <div class="pills-wrap" id="pills-worker">
+                <span class="tool-pill">write_file</span>
+                <span class="tool-pill">terminal</span>
+                <span class="tool-pill">file_patch</span>
+                <span class="tool-pill">execute_code</span>
+                <span class="tool-pill">task_report</span>
+              </div>
+            </div>
+
+            <!-- Col 5: Diseñador UX/UI con Ojos -->
+            <div class="toolbelt-col role-col-designer">
+              <div class="toolbelt-col-header">
+                <div class="role-name-wrap">
+                  <span class="role-dot dot-designer"></span>
+                  <span class="role-title">Diseñador con Ojos</span>
+                </div>
+                <span id="badge-designer" class="agent-state-pill pill-designer">EN ESPERA</span>
+              </div>
+              <div class="active-tool-line">
+                Acción activa: <b id="active-tool-designer">En espera de misión</b>
+              </div>
+              <div class="pills-wrap" id="pills-designer">
+                <span class="tool-pill">ui_inspect</span>
+                <span class="tool-pill">file_patch</span>
+                <span class="tool-pill">computer_use</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Visor de Auditoría Visual (Live UI Inspection & Snapshot) -->
+        <div class="ui-inspect-card">
+          <div class="ui-inspect-header">
+            <h3 class="ui-inspect-title">
+              <span>🎨</span> Auditoría Visual del Diseñador UX/UI con Ojos
+            </h3>
+            <span id="visual-audit-badge" class="visual-audit-badge">
+              En reposo
+            </span>
+          </div>
+          <div class="ui-inspect-content">
+            <div id="visual-audit-preview" class="visual-audit-preview">
+              <span id="visual-audit-preview-txt" class="visual-audit-preview-txt">Sin captura previa</span>
+            </div>
+            <div class="ui-inspect-actions-col">
+              <div class="ui-inspect-desc" id="visual-audit-desc">
+                El Diseñador ejecuta <code>hermes_ui_inspect</code> sobre el servidor local activo, audita el contraste, tipografía y diseño con visión artificial, y aplica parches CSS de autor.
+              </div>
+              <div class="ui-inspect-btn-group">
+                <button id="btn-trigger-ui-inspect" class="btn-secondary">
+                  <span>👁️</span> Forzar Inspección Visual
+                </button>
+                <a id="btn-open-dev-url" href="http://localhost:5173" target="_blank" class="btn-secondary btn-link">
+                  <span>🌐</span> Abrir Servidor
+                </a>
+                <button id="btn-clear-ui-inspect" class="btn-ghost" title="Limpiar restos de auditorías anteriores">
+                  <span>🧹</span> Limpiar Visor
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Panel de Control de Servidores Locales Activos -->
+        <div class="dev-servers-card">
+          <div class="dev-servers-header">
+            <div class="dev-servers-title-wrap">
+              <span>🌐</span>
+              <span class="dev-servers-title">Servidores Locales de Proyectos (Dev Servers en PC)</span>
+              <span id="servers-count-badge" class="dev-servers-count">0 activos</span>
+            </div>
+            <div class="dev-servers-actions">
+              <button id="btn-refresh-servers" class="btn-ghost">⟳ Refrescar</button>
+              <button id="btn-stop-all-servers" class="btn-ghost danger-text">🛑 Detener Todos</button>
+            </div>
+          </div>
+          <div id="local-servers-list" class="dev-servers-list">
+            <div class="empty-servers-msg">No hay servidores de desarrollo activos en este momento.</div>
+          </div>
+        </div>
+
+        <div class="swarm-diagram-card" style="display: none;" id="legacy-swarm-diagram">
+          <div class="agent-node architect-node" id="node-architect">
+            <div class="node-badge" id="swarm-arch-badge" style="color: #60a5fa;">🏛️ PESTAÑA ARQUITECTO</div>
+            <h3 id="swarm-arch-title">Arquitecto Estratega</h3>
+            <p class="node-model" id="swarm-arch-ai">Sin asignar (Abre DeepSeek / Claude)</p>
+            <span class="node-status" id="swarm-arch-status" style="background: rgba(59, 130, 246, 0.1); color: #93c5fd; border: 1px solid rgba(59, 130, 246, 0.2);">Esperando conexión...</span>
+          </div>
+
+          <div class="swarm-flow-arrow" id="swarm-flow-arrow">
+            <span class="arrow-text" id="arrow-delegate-label">delegate_task ➔</span>
+            <div class="arrow-line" id="swarm-arrow-line"></div>
+            <span class="arrow-text" id="arrow-report-label">◀ task_report</span>
+          </div>
+
+          <div class="agent-node worker-node" id="node-worker">
+            <div class="node-badge" id="swarm-work-badge" style="color: #34d399;">⚙️ PESTAÑA OBRERO</div>
+            <h3 id="swarm-work-title">Obrero Técnico</h3>
+            <p class="node-model" id="swarm-work-ai">Sin asignar (Abre ChatGPT / Gemini)</p>
+            <span class="node-status" id="swarm-work-status" style="background: rgba(16, 185, 129, 0.1); color: #6ee7b7; border: 1px solid rgba(16, 185, 129, 0.2);">Esperando conexión...</span>
+          </div>
+        </div>
+
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 24px; margin-bottom: 12px;">
+          <h2 class="sub-title" style="margin: 0;">Flujo de Eventos y Telemetría en Vivo</h2>
+          <div style="display: flex; gap: 8px;">
+            <button class="btn-ghost" id="btn-clear-swarm-feed" style="font-size: 11px; padding: 4px 10px; height: auto;">🗑️ Limpiar Feed</button>
+          </div>
+        </div>
+        <div class="swarm-feed" id="swarm-feed">
+          <div id="swarm-feed-empty" style="text-align: center; padding: 32px 16px; color: #64748b;">
+            <div style="font-size: 32px; margin-bottom: 8px;">🐝</div>
+            <div style="font-size: 13px; font-weight: 500; color: #94a3b8;">El enjambre está a la espera de misiones</div>
+            <div style="font-size: 11px; margin-top: 4px;">Cuando el Arquitecto delegue tareas al Obrero, los eventos en tiempo real aparecerán aquí.</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB: SERVIDORES EN VIVO -->
+      <section class="tab-pane" id="pane-agent-brain">
+        <div class="pane-header">
+          <div>
+            <h1 class="pane-title">🧠 Cerebro del Agente (Memoria 3 Capas)</h1>
+            <p class="pane-desc">Control total sobre la identidad, perfil y memoria. Los cambios se aplican en el próximo chat.</p>
+          </div>
+          <button class="btn-primary" id="btn-reload-brain">⟳ Recargar Archivos</button>
+        </div>
+
+        <div class="brain-stats">
+          <div class="brain-stat">
+            <div class="stat-icon" style="background: rgba(139, 92, 246, 0.12); color: #8b5cf6;">🧬</div>
+            <div class="stat-info">
+              <span class="stat-label">SOUL.md · Identidad</span>
+              <span class="stat-value"><span id="stat-soul-info">— KB · — palabras</span></span>
+            </div>
+          </div>
+          <div class="brain-stat">
+            <div class="stat-icon" style="background: rgba(16, 185, 129, 0.12); color: #10b981;">👤</div>
+            <div class="stat-info">
+              <span class="stat-label">USER.md · Perfil</span>
+              <span class="stat-value"><span id="stat-user-info">— KB · — palabras</span></span>
+            </div>
+          </div>
+          <div class="brain-stat">
+            <div class="stat-icon" style="background: rgba(245, 158, 11, 0.12); color: #f59e0b;">🧠</div>
+            <div class="stat-info">
+              <span class="stat-label">MEMORY.md · Conocimiento</span>
+              <span class="stat-value"><span id="stat-memory-info">— KB · — palabras</span></span>
+            </div>
+          </div>
+        </div>
+
+        <div class="brain-tabbar">
+          <button class="brain-tab active" data-brainfile="soul">🧬 SOUL.md</button>
+          <button class="brain-tab" data-brainfile="user">👤 USER.md</button>
+          <button class="brain-tab" data-brainfile="memory">🧠 MEMORY.md</button>
+        </div>
+
+        <div class="brain-editor-container">
+          <div class="brain-editor-toolbar">
+            <div class="editor-file-indicator">
+              <span class="editor-dot"></span>
+              <span id="editor-active-file">SOUL.md</span>
+            </div>
+            <span class="editor-charcount" id="editor-charcount">0 caracteres</span>
+          </div>
+          <textarea class="brain-editor" id="ta-brain" placeholder="Cargando archivo..." spellcheck="false"></textarea>
+          <div class="brain-editor-footer">
+            <div class="editor-hint">Los cambios se guardan en disco y se aplican en el próximo chat.</div>
+            <button class="btn-save-brain" id="btn-save-brain">💾 Guardar Cambios</button>
+          </div>
+        </div>
+      </section>
+      <section class="tab-pane" id="pane-projects">
+        <div class="pane-header">
+          <div>
+            <h1 class="pane-title">🚀 Proyectos & Red</h1>
+            <p class="pane-desc">Explora tus archivos locales y expone servidores a Internet en un clic.</p>
+          </div>
+        </div>
+
+        <div class="projects-layout" style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+          
+          <!-- Panel de Archivos -->
+          <div class="power-card" style="padding: 0; overflow: hidden; display: flex; flex-direction: column; height: 600px;">
+            <div class="card-header" style="padding: 16px; border-bottom: 1px solid #e5e2dc; margin: 0;">
+              <div class="card-avatar" style="background: rgba(14, 165, 233, 0.15); color: #0ea5e9;">📁</div>
+              <div class="card-meta">
+                <span class="card-tag">WORKSPACE</span>
+                <h3 class="card-title">Explorador de Archivos</h3>
+              </div>
+              <button class="btn-secondary" id="btn-refresh-projects" style="margin-left: auto;">⟳ Refrescar</button>
+            </div>
+            <div id="projects-list" style="flex: 1; overflow-y: auto; padding: 10px;">
+              <div style="padding: 20px; text-align: center; color: #8b8579;">Haz clic en Refrescar para cargar proyectos.</div>
+            </div>
+          </div>
+
+          <!-- Panel de Cloudflare -->
+          <div class="power-card" style="padding: 20px; height: 600px; display: flex; flex-direction: column;">
+            <div class="card-header" style="margin-bottom: 20px;">
+              <div class="card-avatar" style="background: rgba(245, 158, 11, 0.15); color: #f59e0b;">🌐</div>
+              <div class="card-meta">
+                <span class="card-tag">INFRAESTRUCTURA</span>
+                <h3 class="card-title" id="cf-panel-title">Exponer a Internet (Cloudflare)</h3>
+              </div>
+            </div>
+            <p class="card-desc" style="margin-bottom: 20px;">Levanta un túnel seguro para que cualquier persona pueda ver tu localhost.</p>
+            
+            <div style="display: flex; gap: 10px; margin-bottom: 20px;">
+              <input type="text" id="cf-port" placeholder="Puerto (ej: 5173)" value="5173" style="flex: 1; padding: 10px; border: 1px solid #e5e2dc; border-radius: 8px; outline: none;">
+              <button class="btn-primary" id="btn-expose-cf" style="padding: 10px 20px; background: #1a1a1a; color: white; border: none; border-radius: 8px; font-weight: 600; cursor: pointer;">🚀 Exponer</button>
+            </div>
+            
+            <div id="cf-result" style="padding: 16px; background: #faf9f6; border: 1px dashed #e5e2dc; border-radius: 8px; flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center;">
+              <div style="font-size: 24px; margin-bottom: 10px; opacity: 0.5;">🌍</div>
+              <div style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #8b8579;" id="cf-url">Esperando acción...</div>
+            </div>
+          </div>
+
+        </div>
+      </section>
+      <section class="tab-pane" id="pane-servers">
+        <div class="pane-header">
+          <div>
+            <h1 class="pane-title">🌐 Servidores Web Locales (Dev Servers en PC)</h1>
+            <p class="pane-desc">Monitoreo en tiempo real de servicios Vite, React y Node.js levantados por los agentes en tu computadora. Abre la web o detén los procesos con 1 clic.</p>
+          </div>
+          <div style="display: flex; gap: 8px;">
+            <button class="btn-secondary" id="btn-refresh-dedicated-servers">⟳ Refrescar</button>
+            <button class="btn-ghost danger-text" id="btn-stop-all-dedicated-servers">🛑 Detener Todos los Servidores</button>
+          </div>
+        </div>
+
+        <div class="dedicated-servers-wrap">
+          <div id="dedicated-servers-list" class="dev-servers-grid">
+            <div class="empty-servers-msg">No hay servidores de desarrollo activos en este momento.</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 5. TAB: OPERADOR DE ESCRITORIO -->
+      <section class="tab-pane" id="pane-desktop">
+        <div class="pane-header">
+          <div>
+            <h1 class="pane-title">🖥️ Operador de Escritorio (Computer Use)</h1>
+            <p class="pane-desc">Monitoreo de visión de pantalla, coordenadas del cursor y simulación de periféricos de Windows.</p>
+          </div>
+          <button class="btn-primary" id="btn-take-screenshot">📸 Capturar Pantalla Ahora</button>
+        </div>
+
+        <div class="desktop-layout">
+          <div class="screen-preview-box">
+            <div class="preview-header">
+              <span>Monitor Principal (1920 × 1080)</span>
+              <span id="coord-hud">Cursor: X=0, Y=0</span>
+            </div>
+            <div class="preview-container" id="screen-container">
+              <img src="" alt="Captura de pantalla en vivo" id="screen-img" class="screen-render" style="display:none;">
+              <div class="preview-placeholder" id="screen-placeholder">
+                <span style="font-size: 48px;">🖥️</span>
+                <p>Haz clic en "Capturar Pantalla Ahora" para obtener la vista en tiempo real de tu monitor.</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="desktop-controls-box">
+            <h2 class="sub-title">Controles de Periféricos</h2>
+            <div class="control-form">
+              <label class="form-label">Coordenadas de Clic (X, Y):</label>
+              <div class="coord-inputs">
+                <input type="number" id="inp-click-x" placeholder="X (ej. 500)" class="form-input">
+                <input type="number" id="inp-click-y" placeholder="Y (ej. 350)" class="form-input">
+                <button class="btn-secondary" id="btn-test-click">Probar Clic</button>
+              </div>
+
+              <label class="form-label" style="margin-top: 14px;">Escribir Texto:</label>
+              <div class="text-input-group">
+                <input type="text" id="inp-type-text" placeholder="Texto a escribir en la ventana activa..." class="form-input">
+                <button class="btn-secondary" id="btn-test-type">Escribir</button>
+              </div>
+
+              <label class="form-label" style="margin-top: 14px;">Atajo de Teclado:</label>
+              <div class="text-input-group">
+                <select class="form-input" id="sel-hotkey">
+                  <option value="ctrl+s">Ctrl + S (Guardar)</option>
+                  <option value="enter">Enter (Confirmar)</option>
+                  <option value="alt+f4">Alt + F4 (Cerrar)</option>
+                  <option value="ctrl+c">Ctrl + C (Copiar)</option>
+                  <option value="ctrl+v">Ctrl + V (Pegar)</option>
+                </select>
+                <button class="btn-secondary" id="btn-test-hotkey">Pulsar Atajo</button>
+              </div>
+            </div>
+
+            <div class="safety-box">
+              <h4>🛡️ Semáforo de Seguridad Activo</h4>
+              <p>Las acciones destructivas (borrado de archivos o cierre de aplicaciones) requerirán confirmación explícita.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 6. TAB: CONSOLA DE LOGS -->
+      <section class="tab-pane" id="pane-logs">
+        <div class="pane-header">
+          <div>
+            <h1 class="pane-title">📜 Consola de Logs & Eventos en Vivo</h1>
+            <p class="pane-desc">Flujo de depuración en tiempo real transmitido desde el socket del puente en el puerto 17613.</p>
+          </div>
+          <div class="header-actions">
+            <button class="btn-ghost" id="btn-clear-logs">Limpiar Consola</button>
+            <button class="btn-secondary" id="btn-copy-logs">📋 Copiar Logs</button>
+            <button class="btn-secondary" id="btn-download-logs">Descargar Log</button>
+          </div>
+        </div>
+
+        <div class="terminal-box">
+          <div class="terminal-topbar">
+            <div class="terminal-dots">
+              <span class="dot-red"></span>
+              <span class="dot-yellow"></span>
+              <span class="dot-green"></span>
+            </div>
+            <span class="terminal-title">bridge.log (ws://127.0.0.1:17613)</span>
+            <input type="text" class="terminal-search" id="log-search" placeholder="Filtrar eventos...">
+          </div>
+          <pre class="terminal-body" id="log-output">
+[15:55:00] [SYSTEM] GHS Bridge v1.5.5 iniciado en ws://127.0.0.1:17613.
+[15:55:01] [MCP] 6 servidores registrados y listos (blender, filesystem, system, sqlite, fetch, desktop).
+[15:55:02] [EXTENSION] Conexión establecida con el Centro de Mando.
+[15:55:03] [STATUS] Todos los subsistemas operando con latencia &lt; 1ms.
+          </pre>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- Modal para ver el Paper Oficial -->
+  <div id="paper-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0, 0, 0, 0.75); z-index: 10000; align-items: center; justify-content: center; backdrop-filter: blur(5px);">
+    <div style="background: var(--surface-card); width: 92%; max-width: 950px; height: 85vh; border-radius: var(--radius-lg); border: 1px solid rgba(168,85,247,0.3); box-shadow: 0 10px 40px rgba(0,0,0,0.5); display: flex; flex-direction: column; overflow: hidden;">
+      <div style="padding: 16px 22px; border-bottom: 1px solid var(--border-stone); display: flex; align-items: center; justify-content: space-between; background: linear-gradient(135deg, rgba(124, 58, 237, 0.1), rgba(59, 130, 246, 0.05));">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <span style="font-size: 22px;">📄</span>
+          <div>
+            <h3 style="margin: 0; font-size: 16px; font-weight: 800; color: var(--ink-base);">Registro Oficial de Propiedad Intelectual & Superpoderes</h3>
+            <span style="font-size: 11px; color: var(--ink-muted);">GHS Autonomous Core & Hermes OS — Innovaciones Propias</span>
+          </div>
+        </div>
+        <button id="btn-close-paper" style="background: rgba(255,255,255,0.1); border: 1px solid var(--border-stone); width: 32px; height: 32px; border-radius: 8px; font-size: 18px; cursor: pointer; color: var(--ink-base); display: flex; align-items: center; justify-content: center;">✕</button>
+      </div>
+      <div id="paper-content" style="padding: 26px; overflow-y: auto; font-size: 13.5px; line-height: 1.7; color: var(--ink-base); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+        <!-- Se inyecta dinámicamente -->
+      </div>
+    </div>
+  </div>
+
+  <script src="session_manager.js"></script>
+  <script src="dashboard.js"></script>
+</body>
+</html>
