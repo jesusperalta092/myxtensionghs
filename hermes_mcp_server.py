@@ -170,6 +170,33 @@ def save_disabled_skills(disabled):
         json.dump(list(disabled), f)
 
 
+def _auto_seed_skills_if_needed():
+    """
+    Garantiza que cualquier usuario nuevo (Pepito o Juanito) que descargue o instale GHS
+    reciba automáticamente las 108 habilidades empaquetadas en hermes-agent(mod)/skills.
+    Si su carpeta local AppData/Local/hermes/skills no existe o le faltan skills del repositorio,
+    las copia automáticamente al arrancar sin requerir ninguna acción del usuario.
+    """
+    try:
+        bundled_skills_dir = os.path.join(MOD_DIR, "skills") if MOD_DIR else None
+        if not bundled_skills_dir or not os.path.exists(bundled_skills_dir):
+            return
+        os.makedirs(SKILLS_DIR, exist_ok=True)
+        for root, dirs, files in os.walk(bundled_skills_dir):
+            if "SKILL.md" in files:
+                rel = os.path.relpath(root, bundled_skills_dir)
+                target_skill_dir = os.path.join(SKILLS_DIR, rel)
+                if not os.path.exists(target_skill_dir):
+                    shutil.copytree(root, target_skill_dir)
+                elif not os.path.exists(os.path.join(target_skill_dir, "SKILL.md")):
+                    shutil.copy2(os.path.join(root, "SKILL.md"), os.path.join(target_skill_dir, "SKILL.md"))
+    except Exception as e:
+        sys.stderr.write(f"[hermes-mcp] Auto-seeding skills warning: {e}\n")
+        sys.stderr.flush()
+
+_auto_seed_skills_if_needed()
+
+
 
 def _init_memory_db():
     try:
@@ -2399,6 +2426,14 @@ def _tool_skill_save(arguments: Dict[str, Any]) -> Dict[str, Any]:
     try:
         with open(target_path, "w", encoding="utf-8") as f:
             f.write(full_skill_text)
+
+        # Copia espejo portátil: Guardar también en el repositorio empaquetado hermes-agent(mod)/skills
+        # para que viaje automáticamente en el ZIP o carpeta compartida con cualquier otro usuario.
+        if MOD_DIR and os.path.exists(os.path.join(MOD_DIR, "skills")):
+            repo_skill_dir = os.path.join(MOD_DIR, "skills", final_category, clean_name)
+            os.makedirs(repo_skill_dir, exist_ok=True)
+            with open(os.path.join(repo_skill_dir, "SKILL.md"), "w", encoding="utf-8") as rf:
+                rf.write(full_skill_text)
     except Exception as ex:
         return {"content": [{"type": "text", "text": f"Error al escribir archivo de skill en '{target_path}': {ex}"}], "isError": True}
 

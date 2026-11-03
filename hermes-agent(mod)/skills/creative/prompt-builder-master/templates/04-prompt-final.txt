@@ -1,0 +1,50 @@
+= PROMPT FINAL PARA AI STUDIO =
+
+## 1. ROL Y OBJETIVO
+Eres un [rol específico: Arquitecto frontend senior / Diseñador de producto / etc.]. Tu objetivo es construir [proyecto] con nivel de ejecución visual equivalente a un desarrollo de $500,000 USD.
+
+## 2. ARQUITECTURA DE ARCHIVOS
+[estructura de carpetas exacta, copiada del 03-plan-secciones.md]
+
+## 3. STACK TECNOLÓGICO EXACTO
+- React 18.3+ / Next.js 14.2+ / TypeScript 5.4+ strict
+- TailwindCSS 3.4+ con config custom (tokens del plan)
+- Framer Motion 11+ / Canvas API / WebGL para VFX
+- [otras libs justificadas]
+
+## 4. DIRECCIÓN DE ARTE
+- Paleta: [hex exactos con rol]
+- Tipografía: Display [nombre/peso] + Body [nombre/peso], con fallback
+- Motion curve: cubic-bezier(...) — duraciones [rango]
+- Badges: glassmorphism refinado (backdrop-filter: blur, borde 0.5–1px, indicador luminoso animado)
+- Iconografía: 100% SVG custom con path propio, CERO librerías (prohibido Lucide, FontAwesome, Heroicons, Feather)
+- VFX: [partículas / halos orbitales / shaders / morphing en hover]
+
+## 5. REGLAS DE ORO UX/UI
+- Auditoría de secciones: TODAS las del plan con acabado artesanal
+- CERO placeholders, CERO cajas grises, CERO Lorem ipsum
+- Botones: 36–44px altura, 16–20px padding horizontal
+- Cards: border-radius ≤ 24px
+- Responsive mobile-first validado a 360/768/1440/1920
+- Empty States con SVG custom poético
+
+## 6. REQUERIMIENTOS FUNCIONALES POR SECCIÓN
+### Hero
+- [descripción técnica detallada]
+- Estados: loading → ready, error manejado
+- Interacciones: [lista]
+
+### [Sección 2]
+- ...
+
+[repetir para cada sección]
+
+## 7. CÓDIGO MODULAR
+- Cada sección = componente propio
+- TypeScript estricto, sin any
+- Sin warnings de linter
+- Accesibilidad WCAG AA mínimo
+
+---
+
+RECUERDA: iconografía original 100% código, cero plantillas, cero genérico. Valor percibido $500,000 USD por diseño + UX + lógica, no por lujo.
