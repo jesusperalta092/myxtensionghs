@@ -215,21 +215,31 @@
   function updateBackgroundModeAudio() {
     if (A.backgroundMode) {
       try {
-        if (!_bgAudioCtx) {
-          const AudioContext = window.AudioContext || window.webkitAudioContext;
-          if (AudioContext) {
-            _bgAudioCtx = new AudioContext();
-            const osc = _bgAudioCtx.createOscillator();
-            const gain = _bgAudioCtx.createGain();
-            gain.gain.value = 0.00001; // Inaudible micro-pulse to keep Chrome timers unthrottled
-            osc.connect(gain);
-            gain.connect(_bgAudioCtx.destination);
-            osc.start();
-            log("Background keep-alive audio active.");
-          }
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        if (AudioContext && !_bgAudioCtx) {
+          _bgAudioCtx = new AudioContext();
+          const osc = _bgAudioCtx.createOscillator();
+          const gain = _bgAudioCtx.createGain();
+          gain.gain.value = 0.00001; // Inaudible micro-pulse to keep Chrome timers unthrottled
+          osc.connect(gain);
+          gain.connect(_bgAudioCtx.destination);
+          osc.start();
+        }
+        if (_bgAudioCtx && _bgAudioCtx.state === "suspended") {
+          const unlock = () => {
+            if (_bgAudioCtx && _bgAudioCtx.state === "suspended") {
+              _bgAudioCtx.resume().then(() => log("Background keep-alive audio active.")).catch(() => {});
+            }
+            window.removeEventListener("click", unlock, true);
+            window.removeEventListener("keydown", unlock, true);
+          };
+          window.addEventListener("click", unlock, true);
+          window.addEventListener("keydown", unlock, true);
+        } else if (_bgAudioCtx && _bgAudioCtx.state === "running") {
+          log("Background keep-alive audio active.");
         }
       } catch (e) {
-        console.warn("[GHS] Background audio keep-alive error:", e);
+        // silent fallback
       }
     } else {
       try {
@@ -330,7 +340,7 @@
       let tries = 0;
       let messageSent = false;
       while (!messageSent && !landed() && tries < 4 && !A.stop) {
-        if (document.hidden) {
+        if (!A.backgroundMode && document.hidden) {
           diag("send.waitVisible", { tries });
           if (!(await waitVisible()) || A.stop) break; // park (no cap) until foreground; break only on user stop
         }
@@ -458,7 +468,7 @@
       // fix for "I switched to Studio, came back and the command says 'not run'":
       // the loop used to burn its 5-minute inactivity budget off-screen, end with
       // "No response from <site>", and orphan the pending command.
-      if (document.hidden && !A.stop) {
+      if (!A.backgroundMode && document.hidden && !A.stop) {
         const parked = await parkHidden();
         if (A.stop) return { kind: "stopped" };
         if (parked) {
@@ -471,8 +481,8 @@
           if (noTurnSince) noTurnSince += parked;
           if (unsettledSince) unsettledSince += parked;
           if (genOffFirstAt) genOffFirstAt += parked;
+          continue; // re-read everything now that the tab has layout again
         }
-        continue; // re-read everything now that the tab has layout again
       }
       const gen = P.isGenerating();
       if (gen) lastActiveAt = Date.now(); // actively generating ⇒ never time out
@@ -1219,7 +1229,7 @@
     // tool call that fired into Studio off-screen (observed live: GLM minimized
     // still ran execute_luau). Parking here (no time cap) means the call runs the
     // moment the tab is foreground again, instead of being lost or run blind.
-    if (document.hidden && !A.stop) {
+    if (!A.backgroundMode && document.hidden && !A.stop) {
       diag("tool.waitVisible", { name });
       // Only reachable via a user Stop while parked; agentLoop's post-runTool
       // A.stop check breaks the loop and discards this, so it just needs to be
@@ -1763,7 +1773,7 @@
         //    duplicate sends - see the send-side guard in submitAndGetBase).
         // Parking here means we never START a parse/exec cycle off-screen; the
         // send step re-checks too, so a switch-away mid-generation is covered.
-        if (document.hidden && !A.stop) {
+        if (!A.backgroundMode && document.hidden && !A.stop) {
           diag("loop.waitVisible");
           ui.inputCover(true); // keep the "Agent is working" cover up while parked
           if (!(await waitVisible()) || A.stop) break; // park (no cap) until foreground; break only on user stop
@@ -2023,7 +2033,7 @@ NO te detengas a explicar lo que vas a hacer ni esperes confirmación del usuari
           //     the auto-resume watchdog refuses to re-fire an "executed" turn.
           // Parking first keeps all of that truthful: we only commit once we are
           // foreground and about to really dispatch.
-          if (document.hidden && !A.stop) {
+          if (!A.backgroundMode && document.hidden && !A.stop) {
             diag("tool.parkBeforeDispatch", { name: call.tool });
             if (!(await waitVisible()) || A.stop) break;
           }
@@ -5855,7 +5865,7 @@ NO te detengas a explicar lo que vas a hacer ni esperes confirmación del usuari
   const RESUME_FRESH_MS = 180000;
   setInterval(() => {
     if (!A.started || A.running || A.starting || A.injecting) return;
-    if (document.hidden) return;                         // AI tab not foreground → don't parse/exec off-screen (agentLoop gates too)
+    if (!A.backgroundMode && document.hidden) return;                         // AI tab not foreground → don't parse/exec off-screen (agentLoop gates too)
     if (A.userStopped) return;                          // user halted → never relaunch
     if (P.isGenerating()) return;
     if (Date.now() - A.lastGenAt > RESUME_FRESH_MS) return; // not a fresh live turn
@@ -5932,7 +5942,7 @@ NO te detengas a explicar lo que vas a hacer ni esperes confirmación del usuari
   setInterval(async () => {
     if (!sysResendDue()) return;
     if (!A.started || A.running || A.starting || A.injecting) return;
-    if (document.hidden || A.userStopped) return;
+    if ((!A.backgroundMode && document.hidden) || A.userStopped) return;
     if (P.isGenerating()) return;
     // The user is composing - their draft owns the editor, leave it alone.
     try { if ((P.editorText() || "").trim() !== "") return; } catch { return; }
