@@ -3382,14 +3382,15 @@ NO te detengas a explicar lo que vas a hacer ni esperes confirmación del usuari
       A.robloxMode = localStorage.getItem("zs_roblox_mode") === "true";
 
             const modeBtn = root.querySelector("#zs-mode-btn");
+      if (modeBtn) {
+        modeBtn.style.setProperty("display", "none", "important");
+      }
       function updateModeUI(mode) {
         if (!modeBtn) return;
+        modeBtn.style.setProperty("display", "none", "important");
         const isLocal = (mode === "local");
         modeBtn.textContent = isLocal ? "💻 Local" : "☁️ Nube";
         modeBtn.className = "zs-mode-btn " + (isLocal ? "zs-mode-local" : "zs-mode-cloud");
-        modeBtn.title = isLocal
-          ? "MODO PC LOCAL ACTIVO: Poderes totales sobre todo tu disco C:\, PowerShell y programas. Clic para cambiar a Nube (Render)."
-          : "MODO NUBE ACTIVO: Ejecutándose en Render Cloud. Clic para cambiar a PC Local (superpoderes totales).";
         const fBtn = root.querySelector("#zs-folder-btn");
         if (fBtn) {
           fBtn.style.setProperty("display", "none", "important");
@@ -3398,8 +3399,10 @@ NO te detengas a explicar lo que vas a hacer ni esperes confirmación del usuari
       updateModeUIFn = updateModeUI;
       try {
         chrome.storage.local.get("zsMode", (r) => {
-          const cur = (r && r.zsMode) || "local";
-          updateModeUI(cur);
+          if (!r || r.zsMode !== "local") {
+            chrome.storage.local.set({ zsMode: "local" });
+          }
+          updateModeUI("local");
         });
         chrome.storage.onChanged.addListener((changes, area) => {
           if (area === "local" && changes.zsMode) {

@@ -2782,8 +2782,10 @@ Por favor espera unos segundos mientras la IA razona y estructura el blueprint..
 
     // Priorizar skills de creación propia al inicio del catálogo
     skills.sort(function(a, b) {
-      if (a.name === 'threejs-worldclass-offline') return -1;
-      if (b.name === 'threejs-worldclass-offline') return 1;
+      const isPropA = a.name === 'threejs-worldclass-offline' || a.category === 'custom' || a.is_custom === true;
+      const isPropB = b.name === 'threejs-worldclass-offline' || b.category === 'custom' || b.is_custom === true;
+      if (isPropA && !isPropB) return -1;
+      if (!isPropA && isPropB) return 1;
       return (a.name || '').localeCompare(b.name || '');
     });
 
@@ -2791,7 +2793,7 @@ Por favor espera unos segundos mientras la IA razona y estructura el blueprint..
       const card = document.createElement("div");
       card.className = "power-card";
       card.dataset.server = sk.name;
-      const isProprietary = sk.name === 'threejs-worldclass-offline';
+      const isProprietary = sk.name === 'threejs-worldclass-offline' || sk.category === 'custom' || sk.is_custom === true;
       if (isProprietary) {
         card.style.border = "2px solid rgba(168, 85, 247, 0.6)";
         card.style.boxShadow = "0 0 16px rgba(168, 85, 247, 0.2)";
