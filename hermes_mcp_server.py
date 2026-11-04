@@ -2053,6 +2053,9 @@ def _tool_dev_server(arguments: Dict[str, Any]) -> Dict[str, Any]:
                     pid = int(pid_str)
                     if psutil and psutil.pid_exists(pid):
                         p = psutil.Process(pid)
+                        cmd_p = " ".join(p.cmdline() or []).lower()
+                        if any(x in cmd_p for x in ["hermes_mcp_server", "bridge.py", "openai_server", "mcp"]):
+                            continue
                         if p.is_running() and p.status() != psutil.STATUS_ZOMBIE:
                             updated_reg[pid_str] = info
                             registered_pids.add(pid)
@@ -2087,7 +2090,17 @@ def _tool_dev_server(arguments: Dict[str, Any]) -> Dict[str, Any]:
 
                 ghs_dir = os.path.normpath(os.path.dirname(os.path.abspath(__file__))).lower()
 
+                # Never register ourselves or our parent bridge as project dev servers
+                current_pids = {os.getpid()}
+                try:
+                    current_pids.add(os.getppid())
+                except Exception:
+                    pass
+
                 for pid, ports in listening_ports.items():
+                    if pid in current_pids:
+                        continue
+
                     if pid in registered_pids:
                         for s in servers:
                             if s.get("pid") == pid and not s.get("port") and ports:
@@ -2108,20 +2121,21 @@ def _tool_dev_server(arguments: Dict[str, Any]) -> Dict[str, Any]:
                         if any(x in cmd_lower for x in [
                             "system32", "svchost", "antigravity", "language_server",
                             "sqlite-mcp", "mcp-fetch", "server-filesystem", "firebase-tools",
-                            "bridge.py", "launch_studio", "openai_server.py"
+                            "bridge.py", "launch_studio", "openai_server.py", "hermes_mcp_server",
+                            "hermes-agent", "mcp_serve", "mcp_server"
                         ]):
                             continue
 
                         is_dev = any(k in cmd_lower for k in [
                             "vite", "next", "webpack", "parcel", "http-server",
-                            "live-server", "serve", "react-scripts", "astro", "nuxt"
-                        ]) or (
+                            "live-server", "react-scripts", "astro", "nuxt"
+                        ]) or any(k in cmdline_list for k in ["serve", "start", "dev", "preview"]) or (
                             ("node" in pname or "bun" in pname) and any(k in cmd_lower for k in ["run", "dev", "start", "preview"])
                         ) or (
                             "python" in pname and "-m http.server" in cmd_lower
                         )
 
-                        is_user_proj = "downloads" in cmd_lower and ghs_dir not in cmd_lower
+                        is_user_proj = "downloads" in cmd_lower and ghs_dir not in cmd_lower and not any(k in cmd_lower for k in ["hermes", "mcp", "bridge"])
 
                         if is_dev or is_user_proj:
                             proj_match = re.search(r"Downloads[\\/]([^\\/\s\"']+)", cmdline, re.IGNORECASE)
