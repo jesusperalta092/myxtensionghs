@@ -25,8 +25,8 @@
   // signal alongside the necessarily-synthetic input events. This adds a
   // small randomized human-reaction-time delay before each send.
   // REVERT: flip HUMANIZE_SEND to false - single toggle, no other changes needed.
-  const HUMANIZE_SEND = false; // didn't prevent Arena's captcha (fires on turn 1 already) - revert
-  const SEND_JITTER_MS = [400, 1400]; // [min, max] ms, randomized per send
+  const HUMANIZE_SEND = true; // Activo para rate-limiting seguro y evitar "Mensajes demasiado frecuentes"
+  const SEND_JITTER_MS = [1200, 1800]; // [min, max] ms, pausa prudente y natural entre turnos
   function jitterBeforeSend() {
     if (!HUMANIZE_SEND) return Promise.resolve();
     const [lo, hi] = SEND_JITTER_MS;
@@ -343,6 +343,10 @@
         if (!A.backgroundMode && document.hidden) {
           diag("send.waitVisible", { tries });
           if (!(await waitVisible()) || A.stop) break; // park (no cap) until foreground; break only on user stop
+        }
+        if (tries > 0) {
+          diag("send.retryBackoff", { tries });
+          await sleep(2500 * tries); // Espera progresiva antes de reintentar para disipar toasts/rate-limits
         }
         await jitterBeforeSend();
         diag("submit.typeAndSend", { hasImages: !!(images && images.length) });

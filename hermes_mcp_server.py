@@ -1616,24 +1616,29 @@ def _tool_terminal(arguments: Dict[str, Any]) -> Dict[str, Any]:
             cmd_stripped = command.strip()
             lowered = cmd_stripped.lower()
 
+        # Normalizar rutas de Windows con slashes mezclados (ej: C:/Users/... o C:\Users/...)
+        command = re.sub(r'([a-zA-Z]:[\\/][^;"\']+)', lambda m: os.path.normpath(m.group(1)), command)
+
         # Auto-heal single-quoted cd commands in Windows CMD (e.g. cd 'C:\...' -> cd /d "C:\...")
         command = re.sub(r"\bcd(?:\s+/d)?\s+'([^']+)'", r'cd /d "\1"', command, flags=re.IGNORECASE)
         def _norm_cd_path(m):
-            return f'cd /d "{m.group(1).replace("/", chr(92))}"'
+            return f'cd /d "{os.path.normpath(m.group(1))}"'
         command = re.sub(r'\bcd\s+/d\s+"([a-zA-Z]:[^"]+)"', _norm_cd_path, command, flags=re.IGNORECASE)
         cmd_stripped = command.strip()
         lowered = cmd_stripped.lower()
 
-        # 2. If command is a bare PowerShell cmdlet or starts with $ (PowerShell variable/expression)
+        # 2. If command has ';' (PowerShell chaining) or is a bare PowerShell cmdlet or starts with $
         ps_cmdlets = (
             "new-item", "get-item", "remove-item", "copy-item", "move-item", "set-item",
             "get-childitem", "test-path", "start-process", "stop-process", "set-content",
             "get-content", "add-content", "clear-content", "set-location", "select-object",
             "where-object", "format-list", "format-table", "measure-object", "out-string"
         )
-        if cmd_stripped.startswith("$") or any(lowered.startswith(cmdlet + " ") or lowered == cmdlet for cmdlet in ps_cmdlets):
+        is_ps_chain = (";" in cmd_stripped and "&&" not in cmd_stripped)
+        if is_ps_chain or cmd_stripped.startswith("$") or any(lowered.startswith(cmdlet + " ") or lowered == cmdlet for cmdlet in ps_cmdlets):
             if not lowered.startswith("powershell"):
-                command = f'powershell.exe -ExecutionPolicy Bypass -NoProfile -Command "{cmd_stripped}"'
+                escaped_body = cmd_stripped.replace('"', '`"')
+                command = f'powershell.exe -ExecutionPolicy Bypass -NoProfile -Command "{escaped_body}"'
                 cmd_stripped = command.strip()
                 lowered = cmd_stripped.lower()
 
@@ -2944,12 +2949,12 @@ def _tool_project_clean(arguments: Dict[str, Any]) -> Dict[str, Any]:
     action = arguments.get("action", "clean").lower()
     project_name = arguments.get("project_name", "").strip()
     raw_dir = arguments.get("project_dir", "").strip()
-    downloads_dir = os.path.expanduser("~") + "/Downloads"
+    downloads_dir = os.path.normpath(os.path.join(os.path.expanduser("~"), "Downloads"))
     
     if raw_dir:
-        target_dir = resolve_target_path(raw_dir)
+        target_dir = os.path.normpath(resolve_target_path(raw_dir))
     elif project_name:
-        target_dir = os.path.join(downloads_dir, project_name)
+        target_dir = os.path.normpath(os.path.join(downloads_dir, project_name))
     else:
         target_dir = downloads_dir
 
@@ -2972,17 +2977,23 @@ def _tool_project_clean(arguments: Dict[str, Any]) -> Dict[str, Any]:
             if not project_name:
                 project_name = f"Proyecto_{time.strftime('%Y%m%d_%H%M%S')}"
 
-            proj_path = os.path.join(downloads_dir, project_name)
+            proj_path = os.path.normpath(os.path.join(downloads_dir, project_name))
             # Si la carpeta ya existe de un proyecto anterior, crear una aislada con timestamp para evitar colisión/reciclaje
             if os.path.exists(proj_path) and os.listdir(proj_path):
                 project_name = f"{project_name}_{time.strftime('%Y%m%d_%H%M%S')}"
-                proj_path = os.path.join(downloads_dir, project_name)
+                proj_path = os.path.normpath(os.path.join(downloads_dir, project_name))
 
-            temp_path = os.path.join(proj_path, "_temp")
+            temp_path = os.path.normpath(os.path.join(proj_path, "_temp"))
             os.makedirs(proj_path, exist_ok=True)
             os.makedirs(temp_path, exist_ok=True)
             
-            readme_path = os.path.join(proj_path, "LEEME_INSTRUCCIONES.txt")
+            # Anclar inmediatamente el espacio de trabajo activo a este nuevo proyecto
+            try:
+                set_active_workspace(proj_path)
+            except Exception:
+                pass
+
+            readme_path = os.path.normpath(os.path.join(proj_path, "LEEME_INSTRUCCIONES.txt"))
             if not os.path.exists(readme_path):
                 with open(readme_path, "w", encoding="utf-8") as f:
                     f.write(f"# Proyecto Independiente: {project_name}\nFecha de creación: {time.strftime('%Y-%m-%d %H:%M:%S')}\n\nEste directorio es 100% exclusivo y auto-contenido.\nTodo script, código y entregable de esta sesión pertenece aquí.\nArchivos auxiliares o de prueba van en '_temp/'.\n")

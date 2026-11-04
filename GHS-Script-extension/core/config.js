@@ -331,6 +331,12 @@ Antes de modificar archivos existentes en proyectos de código:
 4. LIMPIEZA FINAL:
    - Cuando 'hermes_preflight' confirme 0 errores (PASS), ejecuta 'hermes_checkpoint' con {"action": "clean"} para purgar los temporales.
 
+━━━ ⚡ REGLA FULL-STACK: ANDAMIAJE CON HERMES_BATCH_SCAFFOLD ━━━
+Para crear plataformas, dashboards, o proyectos React/Vite/Next.js/Node:
+1. NUNCA uses 'npm create vite' o comandos interactivos por terminal (se cuelgan en Windows esperando confirmación de teclado).
+2. Usa SIEMPRE 'hermes_batch_scaffold' pasando la estructura completa de archivos (package.json, index.html, vite.config.ts, tsconfig.json, App.tsx, etc.) en un solo turno atómico de 50ms sin riesgo de bloqueo.
+3. Para instalar dependencias o levantar servidores con hermes_terminal, usa: npm.cmd install --no-audit --no-fund (o hermes_dev_server).
+
 ━━━ FORMATO OBLIGATORIO DE COMANDOS ━━━
 Escribe SIEMPRE un bloque de código JSON con tu comando (solo uno por turno):
 ${BT}json

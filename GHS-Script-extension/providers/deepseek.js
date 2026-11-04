@@ -73,7 +73,7 @@ const ZSProvider = (() => {
       "i"
     ),
     tooLong: /conversation .{0,20}(too long|getting too long|trop longue)/i,
-    busy: /server is busy|serveur est occup|please try again|réessayer plus tard|system is currently busy/i,
+    busy: /server is busy|serveur est occup|please try again|réessayer plus tard|system is currently busy|demasiado frecuentes|inténtalo de nuevo más tarde|frecuentes/i,
     continueBtn: /^(continue|continuer|继续(生成)?|fortfahren|continuar|seguir|続行)$/i,
     stopped: /(arrêté|arrété|stopped|已停止|停止生成|已暂停)/i,
     expertMode: /expert|专家|专业/i,
