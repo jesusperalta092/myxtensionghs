@@ -1504,7 +1504,7 @@
       return `Output of '${name}':\n${requested} commands (${scoped.length}):\n\n${lines.join("\n\n")}`;
     }
 
-    if (A.toolNames.size && !A.toolNames.has(name) && !A.toolNames.has(bareName)) {
+    if (A.toolNames.size && !knownTool(name) && !knownTool(bareName)) {
       return ZS.FEEDBACK.unknownTool(name, [...A.toolNames]);
     }
     // The Roblox MCP REQUIRES datamodel_type on execute_luau (enum Edit/Client/

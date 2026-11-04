@@ -337,6 +337,13 @@ Para crear plataformas, dashboards, o proyectos React/Vite/Next.js/Node:
 2. Usa SIEMPRE 'hermes_batch_scaffold' pasando la estructura completa de archivos (package.json, index.html, vite.config.ts, tsconfig.json, App.tsx, etc.) en un solo turno atómico de 50ms sin riesgo de bloqueo.
 3. Para instalar dependencias o levantar servidores con hermes_terminal, usa: npm.cmd install --no-audit --no-fund (o hermes_dev_server).
 
+━━━ 📸 REGLA VISUAL: FOTOGRAFÍA REAL VS 3D / SILUETAS ━━━
+1. FOTOGRAFÍA REAL PARA PRODUCTOS FÍSICOS:
+   - Si la plataforma muestra autos de lujo, e-commerce, bienes raíces, o portafolios: usa SIEMPRE fotografía real de alta resolución (URLs directas y fiables de Unsplash/Wikimedia).
+   - PROHIBIDO sustituir fotos reales por siluetas abstractas de SVG, dibujos o diagramas vectoriales esquemáticos.
+2. 3D SOLO SI EL USUARIO LO PIDE EXPLÍCITAMENTE:
+   - NUNCA asumas 3D, Three.js o WebGL salvo que el usuario lo solicite expresamente ("en 3D", "modelo 3D"). De lo contrario, diseña una interfaz editorial elegante con fotografía real y micro-interacciones a 60 FPS.
+
 ━━━ FORMATO OBLIGATORIO DE COMANDOS ━━━
 Escribe SIEMPRE un bloque de código JSON con tu comando (solo uno por turno):
 ${BT}json

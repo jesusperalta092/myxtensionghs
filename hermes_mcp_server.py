@@ -1163,15 +1163,68 @@ def _tool_ui_inspect(arguments: Dict[str, Any]) -> Dict[str, Any]:
         "mobile": (390, 844)
     }
     viewport_width, viewport_height = devices.get(device, (1440, 900))
-    # Render at realistic height instead of 3600px to avoid destroying CSS 100vh / min-h-screen
-    capture_height = 1400 if full_page else viewport_height
-
     img_bytes = None
     full_img = None
     width, height = viewport_width, viewport_height
 
-    # Primary method: Chrome / Edge Headless with full resolution & zero-cache
+    # ── Method 1: Playwright Chromium (Pixel-Perfect, True Scroll, True Full Page, JS/CSS-Aware) ──
     if url and (url.startswith("http://") or url.startswith("https://") or url.startswith("file://")):
+        try:
+            from playwright.sync_api import sync_playwright
+            with sync_playwright() as p:
+                pw_browser = p.chromium.launch(
+                    headless=True,
+                    args=["--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu", "--hide-scrollbars"]
+                )
+                pw_context = pw_browser.new_context(
+                    viewport={"width": viewport_width, "height": viewport_height},
+                    user_agent=(
+                        "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
+                        if device == "mobile"
+                        else "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
+                    )
+                )
+                pw_page = pw_context.new_page()
+                pw_page.goto(url, wait_until="load", timeout=12000)
+                pw_page.wait_for_timeout(int(max(0.6, min(wait_seconds, 3.0)) * 1000))
+
+                if full_page:
+                    img_bytes = pw_page.screenshot(full_page=True)
+                else:
+                    # Handle scroll_y (numeric, named anchor, percentage, or element ID)
+                    if isinstance(scroll_y_raw, str):
+                        s = scroll_y_raw.strip().lower()
+                        if s.startswith("#") or s in ("catalogo", "tecnologia", "comparador", "historia", "contacto"):
+                            elem_id = s.lstrip("#")
+                            pw_page.evaluate(f"document.getElementById('{elem_id}')?.scrollIntoView({{behavior: 'instant', block: 'start'}})")
+                            pw_page.wait_for_timeout(500)
+                        elif s in ("middle", "mid", "50%"):
+                            pw_page.evaluate("window.scrollTo(0, Math.max(0, (document.body.scrollHeight - window.innerHeight) / 2))")
+                            pw_page.wait_for_timeout(500)
+                        elif s in ("bottom", "footer", "end", "100%"):
+                            pw_page.evaluate("window.scrollTo(0, Math.max(0, document.body.scrollHeight - window.innerHeight))")
+                            pw_page.wait_for_timeout(500)
+                        elif s.isdigit():
+                            pw_page.evaluate(f"window.scrollTo(0, {int(s)})")
+                            pw_page.wait_for_timeout(500)
+                    elif isinstance(scroll_y_raw, (int, float)) and scroll_y_raw > 0:
+                        pw_page.evaluate(f"window.scrollTo(0, {int(scroll_y_raw)})")
+                        pw_page.wait_for_timeout(500)
+
+                    img_bytes = pw_page.screenshot(full_page=False)
+
+                pw_browser.close()
+                if img_bytes and Image is not None:
+                    try:
+                        im = Image.open(io.BytesIO(img_bytes))
+                        width, height = im.size
+                    except Exception:
+                        pass
+        except Exception:
+            img_bytes = None
+
+    # ── Method 2: Chrome / Edge Headless CLI Fallback ──
+    if not img_bytes and url and (url.startswith("http://") or url.startswith("https://") or url.startswith("file://")):
         browser_candidates = [
             r"C:\Program Files\Google\Chrome\Application\chrome.exe",
             r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
@@ -1186,13 +1239,26 @@ def _tool_ui_inspect(arguments: Dict[str, Any]) -> Dict[str, Any]:
             try:
                 import tempfile
                 import shutil
-                # Give Vite HMR a moment to finish emitting modified modules to disk
                 time.sleep(max(0.6, min(wait_seconds, 2.5)))
 
                 temp_profile = tempfile.mkdtemp(prefix="ghs_headless_profile_")
                 tmp_shot = os.path.join(tempfile.gettempdir(), f"ghs_browser_snap_{int(time.time()*1000)}.png")
 
-                # Cache-busting URL to ensure fresh load from local Vite dev server
+                # Parse scroll_top
+                scroll_top = 0
+                if isinstance(scroll_y_raw, str):
+                    s = scroll_y_raw.strip().lower()
+                    if s.isdigit():
+                        scroll_top = int(s)
+                    elif s in ("middle", "mid", "50%", "catalog", "catalogo"):
+                        scroll_top = 1800
+                    elif s in ("bottom", "footer", "end", "100%"):
+                        scroll_top = 4000
+                elif isinstance(scroll_y_raw, (int, float)) and scroll_y_raw > 0:
+                    scroll_top = int(scroll_y_raw)
+
+                capture_height = 4500 if full_page else max(viewport_height, scroll_top + viewport_height + 200)
+
                 sep = "&" if "?" in url else "?"
                 bust_url = f"{url}{sep}_ghs_ts={int(time.time() * 1000)}"
 
@@ -1227,29 +1293,12 @@ def _tool_ui_inspect(arguments: Dict[str, Any]) -> Dict[str, Any]:
                         full_img = im.copy()
                         width, height = im.size
 
-                        # Process scroll_y if specified
-                        scroll_top = 0
-                        if isinstance(scroll_y_raw, str):
-                            s = scroll_y_raw.strip().lower()
-                            if s in ("top", "hero", "header", "0%"):
-                                scroll_top = 0
-                            elif s in ("middle", "mid", "50%", "catalog"):
-                                scroll_top = max(0, (im.height - viewport_height) // 2)
-                            elif s in ("bottom", "footer", "end", "100%"):
-                                scroll_top = max(0, im.height - viewport_height)
-                            elif s.isdigit():
-                                scroll_top = int(s)
-                        elif isinstance(scroll_y_raw, (int, float)) and scroll_y_raw > 0:
-                            scroll_top = int(scroll_y_raw)
-
-                        # If user specifically asked to scroll to a section
                         if scroll_top > 0 and im.height > viewport_height:
-                            top = min(scroll_top, im.height - viewport_height)
+                            top = min(scroll_top, max(0, im.height - viewport_height))
                             bottom = min(top + viewport_height, im.height)
                             im = im.crop((0, top, im.width, bottom))
                             width, height = im.size
                         elif full_page and im.height > viewport_height:
-                            # Smart crop trailing uniform rows from bottom so agent doesn't perceive artificial padding
                             try:
                                 rgb_im = im.convert("RGB")
                                 w_im, h_im = rgb_im.size

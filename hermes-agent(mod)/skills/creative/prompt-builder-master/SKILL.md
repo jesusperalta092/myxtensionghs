@@ -74,7 +74,7 @@ Cuando esta skill se active, ejecuta en orden estricto. Genera los artefactos in
 1. **Analiza NICHO Y PROPÓSITO REAL** del proyecto (e-commerce, salud, arquitectura, SaaS, finanzas, social, etc.). No asumas un nicho: detecta el real.
 2. **AUDITORÍA NARRATIVA OBLIGATORIA**: lista y razona TODAS las secciones y pantallas clave que el proyecto necesita para estar 100% completo y funcional. No ignores secciones intermedias ni las dejes como relleno. Cada sección debe tener propósito claro y ejecución dedicada.
 3. **Dirección de arte**: elige 1 de los 5 presets documentados en `references/presets-direccion-arte.md` y **justifícala** en 2 líneas. **PROHIBIDO cyberpunk o dark-mode por defecto** salvo que la marca lo exija explícitamente. Recuerda: "Luxury" no significa bordes dorados, sino tipografía impecable, espaciado de alto aire y jerarquía de precisión.
-4. **Diseña un Hero Avanzado** con recursos adaptados a la propuesta (carruseles 3D con físicas, lookbook interactivo, visores dinámicos en Canvas, partículas orgánicas, etc.).
+4. **Diseña un Hero Avanzado de Alto Impacto**: tipografía de gran escala, fotografía real editorial a sangrado completo, iluminación ambiental sutil y micro-interacciones de precisión. **PROHIBIDO asumir 3D, Three.js o Canvas salvo que el usuario lo pida explícitamente**.
 5. **Si requiere GAMIFICACIÓN**: activa la directiva de ARTE AAA + VFX EN CANVAS (capa de imagen base + capa de código dinámico).
 6. **Genera 5–10 preguntas de indagación** breves, adaptadas al proyecto, ofreciendo opciones visuales y funcionales coherentes.
 
@@ -93,9 +93,11 @@ Inyecta sin falta estas reglas en el prompt final:
    - PROHIBIDO botones rectangulares blancos/grises planos con texto estático ("NEW", "LIMITED", "SALE", "POPULAR").
    - **Badges estilizados**: Glassmorphism refinado (`backdrop-filter: blur`), bordes ultrafinos (0.5px–1px) con acentos de color según estado, indicadores luminosos en código (micropuntos con animación de pulso/ respiración `keyframes`), tipografía con `letter-spacing` elegante y combinaciones cromáticas de alto contraste armónico.
 
-3. **PROHIBICIÓN ABSOLUTA DE CONTENEDORES VACÍOS, CAJAS GRISES O PLACEHOLDERS**:
-   - PROHIBIDO dejar cuadros grises, rectángulos neutros sin renderizar o formas abstractas vacías simulando imágenes.
-   - Si una sección requiere comparativas, imágenes, equipo o tecnología: la IA DEBE construir el componente dinámico interactivo COMPLETO en código (sliders interactivos de comparación en Canvas, mapas interactivos con hotspots, ilustraciones vectoriales complejas, cards animadas con Depth Blur).
+3. **FOTOGRAFÍA REAL DE ALTA DEFINICIÓN OBLIGATORIA (PROHIBIDO SILUETAS/3D NO PEDIDO)**:
+   - En proyectos que involucren **productos físicos del mundo real** (automóviles de lujo, bienes raíces, portafolios, e-commerce, moda, hoteles): es **ESTRICTAMENTE OBLIGATORIO usar FOTOGRAFÍA REAL DE ALTA RESOLUCIÓN** (vía URLs directas y limpias de Unsplash/Wikimedia de alta calidad).
+   - **PROHIBIDO sustituir fotos reales por siluetas abstractas de SVG, diagramas vectoriales o alambres**: A un cliente o entusiasta de autos de lujo no se le muestran vectores abstractos, se le muestra la fotografía real del vehículo.
+   - **3D / WebGL / Canvas**: **ÚNICAMENTE** se incluye si el usuario lo solicita explícitamente ("en 3D", "con modelo 3D"). Si no fue pedido, usa fotografía editorial real, diseño tipográfico suizo/editorial impecable y Framer Motion.
+   - **Anti-placeholders real**: "Cero placeholders" prohíbe cajas grises vacías o textos "placeholder.jpg"; significa proveer imágenes y fotografías reales, cargadas y hermosas.
 
 4. **DEDICACIÓN Y TRABAJO DEDICADO A CADA SECCIÓN**:
    - Cada sección identificada en la auditoría (Hero, filtros, grid de cards, paneles de info, formularios/suscripciones, footers) recibe el mismo nivel de acabado artesanal, con animaciones de entrada (`scroll triggers` o Framer Motion), micro-interacciones al hover y espaciado proporcional impecable.
