@@ -5037,20 +5037,54 @@ NO te detengas a explicar lo que vas a hacer ni esperes confirmación del usuari
       hdr.className = "zs-shot-hdr";
       const ttl = document.createElement("span");
       ttl.className = "zs-shot-ttl";
-      ttl.textContent = `${toolName} · ${images.length} image${images.length > 1 ? "s" : ""}`;
+      ttl.textContent = `👁️ ${toolName}`;
+
+      const actions = document.createElement("div");
+      actions.className = "zs-shot-actions";
+
+      const expandBtn = document.createElement("button");
+      expandBtn.className = "zs-shot-btn";
+      expandBtn.title = "Alternar vista completa / zoom";
+      expandBtn.textContent = "⛶ Zoom";
+      expandBtn.addEventListener("click", () => {
+        wrap.classList.toggle("zs-shot-expanded");
+        expandBtn.textContent = wrap.classList.contains("zs-shot-expanded") ? "🗗 Reducir" : "⛶ Zoom";
+      });
+
+      const openBtn = document.createElement("button");
+      openBtn.className = "zs-shot-btn";
+      openBtn.title = "Abrir captura en pestaña nueva";
+      openBtn.textContent = "↗ Abrir";
+      openBtn.addEventListener("click", () => {
+        if (images && images[0]) {
+          const w = window.open("");
+          w.document.write(`<title>${toolName} Snapshot</title><body style="margin:0;background:#0e1117;display:flex;justify-content:center;padding:20px;"><img src="data:${images[0].mimeType || "image/png"};base64,${images[0].data}" style="max-width:100%;height:auto;box-shadow:0 0 40px rgba(0,0,0,0.8);border-radius:8px;"/></body>`);
+        }
+      });
+
       const close = document.createElement("button");
       close.className = "zs-shot-x";
       close.textContent = "✕";
       close.addEventListener("click", () => wrap.remove());
+
+      actions.appendChild(expandBtn);
+      actions.appendChild(openBtn);
+      actions.appendChild(close);
+
       hdr.appendChild(ttl);
-      hdr.appendChild(close);
+      hdr.appendChild(actions);
       wrap.appendChild(hdr);
       const body = document.createElement("div");
       body.className = "zs-shot-body";
       for (const img of images) {
         const el = document.createElement("img");
         el.className = "zs-shot-img";
-        el.src = `data:${img.mimeType || "image/jpeg"};base64,${img.data}`;
+        el.title = "Clic para alternar zoom / vista completa";
+        el.src = `data:${img.mimeType || "image/png"};base64,${img.data}`;
+        el.addEventListener("click", () => {
+          wrap.classList.toggle("zs-shot-expanded");
+          expandBtn.textContent = wrap.classList.contains("zs-shot-expanded") ? "🗗 Reducir" : "⛶ Zoom";
+        });
         body.appendChild(el);
       }
       wrap.appendChild(body);

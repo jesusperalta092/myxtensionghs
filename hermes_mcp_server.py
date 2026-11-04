@@ -1093,12 +1093,43 @@ def _inspect_dom_telemetry(url: str) -> Dict[str, Any]:
 
 def _tool_ui_inspect(arguments: Dict[str, Any]) -> Dict[str, Any]:
     url = arguments.get("url", "").strip()
-    wait_seconds = int(arguments.get("wait_seconds", 2))
-    full_page = arguments.get("full_page", True)
-    if isinstance(full_page, str):
-        full_page = full_page.lower() in ("true", "1", "yes")
-    device = arguments.get("device", "desktop").lower()
-    scroll_y_raw = arguments.get("scroll_y", 0)
+    
+    # Handle wait time (support wait_ms or wait_seconds)
+    wait_ms = arguments.get("wait_ms")
+    if wait_ms is not None:
+        try:
+            wait_seconds = max(0.5, float(wait_ms) / 1000.0)
+        except Exception:
+            wait_seconds = 2.0
+    else:
+        try:
+            wait_seconds = max(0.5, float(arguments.get("wait_seconds", 2.0)))
+        except Exception:
+            wait_seconds = 2.0
+
+    # Handle device / viewport aliases
+    device = arguments.get("device") or arguments.get("viewport", "desktop")
+    device = str(device).lower().strip()
+    if device not in ("desktop", "laptop", "tablet", "mobile"):
+        device = "desktop"
+
+    # Handle scroll_y and section aliases
+    scroll_y_raw = arguments.get("scroll_y")
+    if scroll_y_raw is None:
+        scroll_y_raw = arguments.get("section", 0)
+
+    # Determine full_page: if user/agent explicitly specifies a scroll position or section,
+    # full_page should be False so that specific section is inspected cleanly.
+    full_page_arg = arguments.get("full_page")
+    if full_page_arg is not None:
+        if isinstance(full_page_arg, str):
+            full_page = full_page_arg.lower() in ("true", "1", "yes")
+        else:
+            full_page = bool(full_page_arg)
+    else:
+        # Default: if scrolling requested, false; otherwise true (full page audit)
+        is_scrolling = scroll_y_raw not in (0, "0", None, False, "")
+        full_page = not is_scrolling
 
     # Normalize file URLs or local HTML paths
     if url:
@@ -1185,30 +1216,97 @@ def _tool_ui_inspect(arguments: Dict[str, Any]) -> Dict[str, Any]:
                     )
                 )
                 pw_page = pw_context.new_page()
-                pw_page.goto(url, wait_until="load", timeout=12000)
-                pw_page.wait_for_timeout(int(max(0.6, min(wait_seconds, 3.0)) * 1000))
+                pw_page.goto(url, wait_until="load", timeout=14000)
+                
+                # 1. Wait for network requests to settle (images, webfonts, APIs)
+                try:
+                    pw_page.wait_for_load_state("networkidle", timeout=3500)
+                except Exception:
+                    pass
+
+                # 2. Wait for all <img> tags to complete loading
+                try:
+                    pw_page.evaluate("""
+                        async () => {
+                            const imgs = Array.from(document.images);
+                            await Promise.all(imgs.map(img => {
+                                if (img.complete && img.naturalWidth > 0) return null;
+                                return new Promise(resolve => {
+                                    img.addEventListener('load', resolve, { once: true });
+                                    img.addEventListener('error', resolve, { once: true });
+                                    setTimeout(resolve, 3000);
+                                });
+                            }));
+                        }
+                    """)
+                except Exception:
+                    pass
+
+                # 3. Fast-forward Framer Motion & CSS animations so text is never stuck at opacity 0
+                try:
+                    pw_page.evaluate("""
+                        () => {
+                            const s = document.createElement('style');
+                            s.id = '__ghs_snap_fix';
+                            s.innerHTML = `
+                                *, *::before, *::after {
+                                    transition-duration: 0.001ms !important;
+                                    animation-duration: 0.001ms !important;
+                                    animation-delay: 0s !important;
+                                }
+                            `;
+                            document.head.appendChild(s);
+
+                            // Force any element stuck with opacity 0 (e.g. Framer Motion initial='hidden') to full visibility
+                            document.querySelectorAll('*').forEach(el => {
+                                const comp = window.getComputedStyle(el);
+                                if (comp.opacity === '0' || comp.opacity === '0.0') {
+                                    el.style.setProperty('opacity', '1', 'important');
+                                }
+                                if (comp.visibility === 'hidden') {
+                                    el.style.setProperty('visibility', 'visible', 'important');
+                                }
+                            });
+                        }
+                    """)
+                except Exception:
+                    pass
+
+                pw_page.wait_for_timeout(int(max(0.4, min(wait_seconds, 2.5)) * 1000))
 
                 if full_page:
                     img_bytes = pw_page.screenshot(full_page=True)
                 else:
-                    # Handle scroll_y (numeric, named anchor, percentage, or element ID)
-                    if isinstance(scroll_y_raw, str):
-                        s = scroll_y_raw.strip().lower()
-                        if s.startswith("#") or s in ("catalogo", "tecnologia", "comparador", "historia", "contacto"):
-                            elem_id = s.lstrip("#")
-                            pw_page.evaluate(f"document.getElementById('{elem_id}')?.scrollIntoView({{behavior: 'instant', block: 'start'}})")
-                            pw_page.wait_for_timeout(500)
-                        elif s in ("middle", "mid", "50%"):
-                            pw_page.evaluate("window.scrollTo(0, Math.max(0, (document.body.scrollHeight - window.innerHeight) / 2))")
-                            pw_page.wait_for_timeout(500)
-                        elif s in ("bottom", "footer", "end", "100%"):
-                            pw_page.evaluate("window.scrollTo(0, Math.max(0, document.body.scrollHeight - window.innerHeight))")
-                            pw_page.wait_for_timeout(500)
-                        elif s.isdigit():
-                            pw_page.evaluate(f"window.scrollTo(0, {int(s)})")
-                            pw_page.wait_for_timeout(500)
-                    elif isinstance(scroll_y_raw, (int, float)) and scroll_y_raw > 0:
-                        pw_page.evaluate(f"window.scrollTo(0, {int(scroll_y_raw)})")
+                    # Precise section / scroll navigation
+                    if scroll_y_raw not in (0, "0", None, False, ""):
+                        pw_page.evaluate("""(target) => {
+                            if (typeof target === 'number' || /^\\d+$/.test(target)) {
+                                window.scrollTo(0, parseInt(target, 10));
+                                return;
+                            }
+                            const str = String(target).toLowerCase().replace(/^#/, '').trim();
+                            if (str === 'middle' || str === 'mid' || str === '50%') {
+                                window.scrollTo(0, Math.max(0, (document.body.scrollHeight - window.innerHeight) / 2));
+                                return;
+                            }
+                            if (str === 'bottom' || str === 'footer' || str === 'end' || str === '100%') {
+                                window.scrollTo(0, Math.max(0, document.body.scrollHeight - window.innerHeight));
+                                return;
+                            }
+                            if (str === 'top' || str === 'hero' || str === 'header') {
+                                window.scrollTo(0, 0);
+                                return;
+                            }
+                            // Search by ID or querySelector
+                            const el = document.getElementById(str) ||
+                                       document.querySelector('#' + str) ||
+                                       document.querySelector('[id*="' + str + '"]') ||
+                                       document.querySelector('.' + str) ||
+                                       document.querySelector(str);
+                            if (el) {
+                                el.scrollIntoView({ behavior: 'instant', block: 'start' });
+                            }
+                        }""", str(scroll_y_raw))
                         pw_page.wait_for_timeout(500)
 
                     img_bytes = pw_page.screenshot(full_page=False)
@@ -1247,13 +1345,13 @@ def _tool_ui_inspect(arguments: Dict[str, Any]) -> Dict[str, Any]:
                 # Parse scroll_top
                 scroll_top = 0
                 if isinstance(scroll_y_raw, str):
-                    s = scroll_y_raw.strip().lower()
+                    s = scroll_y_raw.strip().lower().replace("#", "")
                     if s.isdigit():
                         scroll_top = int(s)
-                    elif s in ("middle", "mid", "50%", "catalog", "catalogo"):
-                        scroll_top = 1800
-                    elif s in ("bottom", "footer", "end", "100%"):
-                        scroll_top = 4000
+                    elif s in ("middle", "mid", "50%", "catalog", "catalogo", "coleccion"):
+                        scroll_top = 1400
+                    elif s in ("bottom", "footer", "end", "contacto", "100%"):
+                        scroll_top = 3500
                 elif isinstance(scroll_y_raw, (int, float)) and scroll_y_raw > 0:
                     scroll_top = int(scroll_y_raw)
 
@@ -1271,12 +1369,6 @@ def _tool_ui_inspect(arguments: Dict[str, Any]) -> Dict[str, Any]:
                     "--use-gl=angle",
                     "--disable-dev-shm-usage",
                     "--hide-scrollbars",
-                    "--disable-cache",
-                    "--disk-cache-size=0",
-                    "--media-cache-size=0",
-                    "--disable-application-cache",
-                    "--disable-back-forward-cache",
-                    "--disable-background-networking",
                     "--run-all-compositor-stages-before-draw",
                     f"--user-data-dir={temp_profile}",
                     f"--window-size={viewport_width},{capture_height}",
@@ -1293,7 +1385,7 @@ def _tool_ui_inspect(arguments: Dict[str, Any]) -> Dict[str, Any]:
                         full_img = im.copy()
                         width, height = im.size
 
-                        if scroll_top > 0 and im.height > viewport_height:
+                        if not full_page and im.height > viewport_height:
                             top = min(scroll_top, max(0, im.height - viewport_height))
                             bottom = min(top + viewport_height, im.height)
                             im = im.crop((0, top, im.width, bottom))
@@ -3675,16 +3767,28 @@ TOOLS = [
                 },
                 "scroll_y": {
                     "type": ["integer", "string"],
-                    "description": "Posición de desplazamiento vertical en píxeles (ej: 0, 800, 1600, 2400) o sección semántica ('top', 'middle', 'bottom', 'hero', 'footer', '50%')."
+                    "description": "Posición de desplazamiento vertical en píxeles (ej: 0, 800, 1600, 2400) o sección semántica ('top', 'middle', 'bottom', 'hero', 'coleccion', 'contacto', '#proceso')."
+                },
+                "section": {
+                    "type": "string",
+                    "description": "Alias para scroll_y: ID o nombre de la sección a la cual hacer scroll directo (ej: 'coleccion', 'barrios', 'proceso', 'contacto')."
                 },
                 "device": {
                     "type": "string",
                     "enum": ["desktop", "laptop", "tablet", "mobile"],
                     "description": "Dispositivo a simular: 'desktop' (1440x900), 'laptop' (1280x800), 'tablet' (768x1024), 'mobile' (390x844)."
                 },
+                "viewport": {
+                    "type": "string",
+                    "description": "Alias para device: 'desktop', 'laptop', 'tablet' o 'mobile'."
+                },
                 "wait_seconds": {
+                    "type": ["integer", "number"],
+                    "description": "Segundos de espera antes de la captura para permitir animaciones y fuentes (defecto: 2s)."
+                },
+                "wait_ms": {
                     "type": "integer",
-                    "description": "Segundos de espera antes de la captura para permitir animaciones, fuentes y Canvas VFX (defecto: 2s)."
+                    "description": "Milisegundos de espera antes de la captura (ej: 4000, 6000)."
                 }
             }
         }
