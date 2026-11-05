@@ -1750,6 +1750,8 @@
     A.loopKey = null; // pinned by syncSessionState once this chat has an id + content
     let truncCount = 0;
     const MAX_TRUNC = 6;
+    let parseErrorCount = 0;
+    const MAX_PARSE_ERROR = 3;
     let lastFailedCallSig = null;
     let repeatFailCount = 0;
     // Re-send the command list after this many successful tool calls. Kept high
@@ -1841,6 +1843,7 @@
         truncCount = 0;
 
         if (res.kind === "parse_error") {
+          parseErrorCount++;
           // The command turn ended in a parse error - it NEVER ran. Paint its chip
           // as an error (owned, so the sweep won't repaint it the green ✓ "done" it
           // stamps on any command-shaped turn once generation ends - the misleading
@@ -1858,6 +1861,15 @@
               : "bad JSON";
             decorate.toolBox(res.item, failName, "err", detail, true, "", ZS.toolCategory(failName));
           }
+
+          if (parseErrorCount >= MAX_PARSE_ERROR) {
+            diag("parse_error.circuit_breaker", { count: parseErrorCount, failName, reason: res.reason });
+            ui.banner("warn", `Formato de comando inválido en ${failName}`,
+              `El comando no pudo ejecutarse tras ${parseErrorCount} intentos (JSON inválido o truncado). Se pausó el bucle para evitar consumo innecesario.`);
+            ui.toast(`⚠️ Pausado: error recurrente al parsear comando JSON`, "warn");
+            break;
+          }
+
           // Pass the detected command name so the feedback only offers the
           // ###LUA### block when it actually applies (execute_luau) - never for a
           // truncated/broken execute_blender_code or other JSON-only command.
@@ -1865,6 +1877,7 @@
           continue;
         }
         if (res.kind === "text") {
+          parseErrorCount = 0;
           const isSwarmMode = A.role === "all_in_one" || A.role === "worker" || A.role === "ui_designer" || A.role === "architect" || A.role === "gem" || A.role === "gem_builder";
           const hasPendingSteps = /(?:el\s*siguiente\s*paso\s*es|como\s*pr[oó]ximo\s*paso|voy\s*a\s*(?:crear|editar|instalar|levantar|auditar|ejecutar|inspeccionar|revisar)|procedo\s*a\s*(?:crear|editar|instalar|levantar|ejecutar)|paso\s*siguiente:\s*|a\s*continuaci[oó]n\s*(?:crear[eé]|modificar[eé]|ejecutar[eé])|falta\s*por\s*(?:hacer|crear|implementar)|vamos\s*a\s*(?:crear|modificar|ejecutar)|quedan\s*pendientes)/i.test(res.text);
           const isDeliveryOrComplete = /(?:MISI[ÓO]N\s*(?:TOTALMENTE\s*)?COMPLETAD[AO]|MISI[ÓO]N\s*CUMPLIDA|PROYECTO\s*(?:100%|TOTALMENTE|COMPLETAMENTE)?\s*(?:COMPLETADO|FINALIZADO|LISTO|CONCLUIDO)|ENTREGA\s*FINAL|CONSTRUCCI[ÓO]N\s*FINALIZADA|APLICACI[ÓO]N\s*(?:100%\s*)?(?:LISTA|OPERATIVA|TERMINADA)|STOREFRONT\s*(?:LISTO|COMPLETO)|LISTO,?\s*(?:HERMANO|AMIGO|USUARIO)|YA\s*(?:QUED[ÓO]|EST[ÁA]|FUE|HE)\s*(?:GENERAD[AO]|CREAD[AO]|ACTUALIZAD[AO]|FILTRAD[AO]|PROCESAD[AO]|COMPLETAD[AO]|LIST[AO])|DESCARGAR\s*(?:EXCEL|ARCHIVO|DOCUMENTO)|ARCHIVO\s*(?:YA\s*)?EST[ÁA]\s*DISPONIBLE|ESTADO\s*FINAL|RESULTADO\s*FINAL|TOTAL:\s*\d+\s*(?:ALUMNOS|ITEMS|REGISTROS|FILAS)|\.xlsx|\.csv|\.docx|\.pdf)/i.test(res.text);
@@ -2010,6 +2023,7 @@ NO te detengas a explicar lo que vas a hacer ni esperes confirmación del usuari
         }
 
         if (res.kind === "tool") {
+          parseErrorCount = 0;
           A.textNudges = 0;
           const calls = res.calls;
           if (calls.length > 1) {

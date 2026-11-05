@@ -190,6 +190,64 @@ const ZSParse = (() => {
     }
   }
 
+  function extractMalformedCommandFallback(text) {
+    if (!text || typeof text !== "string") return null;
+    const cmdMatch = text.match(/"(?:command|tool|action)"\s*:\s*"([a-zA-Z0-9_\/-]+)"/);
+    if (!cmdMatch) return null;
+    const tool = cmdMatch[1];
+
+    if (tool === "hermes_file_write" || tool === "file_write") {
+      const pathMatch = text.match(/"(?:path|filepath|file_path|file|target_path)"\s*:\s*"([^"]+)"/);
+      if (!pathMatch) return null;
+      const path = pathMatch[1];
+
+      const contentIdx = text.search(/"(?:content|code|text)"\s*:\s*"/);
+      if (contentIdx !== -1) {
+        const colonIdx = text.indexOf(':', contentIdx);
+        const startQuote = text.indexOf('"', colonIdx);
+        if (startQuote !== -1) {
+          const lastQuote = text.lastIndexOf('"');
+          if (lastQuote > startQuote) {
+            let content = text.slice(startQuote + 1, lastQuote);
+            content = content.replace(/\\"/g, '"').replace(/\\n/g, "\n").replace(/\\t/g, "\t").replace(/\\\\/g, "\\");
+            return {
+              tool: "hermes_file_write",
+              arguments: { path, content }
+            };
+          }
+        }
+      }
+    }
+
+    if (tool === "hermes_terminal" || tool === "terminal") {
+      const afterCmd = text.slice(cmdMatch.index + cmdMatch[0].length);
+      const innerCmdIdx = afterCmd.search(/"(?:command|cmd)"\s*:\s*"/);
+      if (innerCmdIdx !== -1) {
+        const colonIdx = afterCmd.indexOf(':', innerCmdIdx);
+        const startQuote = afterCmd.indexOf('"', colonIdx);
+        if (startQuote !== -1) {
+          let endQuote = -1;
+          const trailingTimeout = afterCmd.search(/",\s*"(?:timeout|cwd|silent)"/);
+          if (trailingTimeout !== -1 && trailingTimeout > startQuote) {
+            endQuote = trailingTimeout;
+          } else {
+            endQuote = afterCmd.lastIndexOf('"');
+          }
+          if (endQuote > startQuote) {
+            let command = afterCmd.slice(startQuote + 1, endQuote);
+            command = command.replace(/\\"/g, '"').replace(/\\n/g, "\n").replace(/\\t/g, "\t").replace(/\\\\/g, "\\");
+            return {
+              tool: "hermes_terminal",
+              arguments: { command }
+            };
+          }
+        }
+      }
+    }
+
+    return null;
+  }
+
   function extractToolAnywhere(text) {
     for (const key of ['"command"', '"tool"', '"action"', '"name"', '"tool_name"', '"toolName"']) {
       let pos = 0;
@@ -199,24 +257,36 @@ const ZSParse = (() => {
         const start = text.lastIndexOf("{", s);
         if (start === -1) { pos = s + 1; continue; }
         const end = matchBrace(text, start); // string-aware brace matching
-        if (end === -1) { pos = s + 1; continue; }
-        try {
-          const call = normalizeCall(parseLoose(text.slice(start, end + 1)));
-          if (call && call.tool) {
-            if (key === '"name"' || key === '"tool_name"' || key === '"toolName"') {
-              const t = call.tool;
-              if (!/^(?:rea_|android_|hermes_|blender_|swarm_|gem_|roblox_|execute_|multi_|get_|script_|insert_|delete_|list_)/i.test(t)) {
-                pos = s + 1;
-                continue;
+
+        const endCandidates = [];
+        if (end !== -1) endCandidates.push(end);
+        const lastBrace = text.lastIndexOf("}");
+        if (lastBrace > start && !endCandidates.includes(lastBrace)) {
+          endCandidates.push(lastBrace);
+        }
+
+        let foundCall = null;
+        for (const candidateEnd of endCandidates) {
+          try {
+            const call = normalizeCall(parseLoose(text.slice(start, candidateEnd + 1)));
+            if (call && call.tool) {
+              if (key === '"name"' || key === '"tool_name"' || key === '"toolName"') {
+                const t = call.tool;
+                if (!/^(?:rea_|android_|hermes_|blender_|swarm_|gem_|roblox_|execute_|multi_|get_|script_|insert_|delete_|list_)/i.test(t)) {
+                  continue;
+                }
               }
+              foundCall = call;
+              break;
             }
-            return call;
-          }
-        } catch {}
+          } catch {}
+        }
+
+        if (foundCall) return foundCall;
         pos = s + 1;
       }
     }
-    return null;
+    return extractMalformedCommandFallback(text);
   }
 
   function parseToolCalls(r) {
@@ -340,9 +410,8 @@ const ZSParse = (() => {
         const call = normalizeCall(parseLoose(body + stack.reverse().join("")));
         if (call) return cleanLuaCall(call);
       } catch {}
-      return null;
     }
-    return null;
+    return extractMalformedCommandFallback(text);
   }
 
   function toolNameFromText(txt) {

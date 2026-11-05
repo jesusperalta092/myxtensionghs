@@ -2,6 +2,18 @@
 
 All notable changes to GHS Free are documented here.
 
+## [1.5.8] - 2026-11-05
+
+### Fixed & Hardened
+- **hermes_batch_scaffold & hermes_mcp_server: Universal Project Directory Resolution & Path Normalization:**
+  - **Dynamic `project_name` Handling:** Added support for `project_name`, `project`, and `name` in `hermes_batch_scaffold`. When an LLM specifies a project name instead of a full path, GHS now automatically creates the target folder under the base workspace (`~/Downloads/<project_name>`) and sets it as the active workspace, preventing files from misrouting into previous unrelated projects.
+  - **Universal Tilde (`~`) & Environment Path Expansion:** Patched `resolve_target_path()` to expand `~`, `$HOME`, and `%USERPROFILE%` via `os.path.expanduser()` and `os.path.expandvars()`, eliminating phantom nested subdirectories on Windows (e.g. `web-crapper\~\Downloads\...`).
+- **Chrome Extension: Anti-Loop Circuit Breaker & Resilient Command Parsing:**
+  - **Infinite Parse-Error Circuit Breaker:** Implemented a hard 3-retry circuit breaker in `main.js` (`parseErrorCount >= MAX_PARSE_ERROR`) for `res.kind === "parse_error"`, preventing the agent from getting trapped in endless JSON parse retry loops when models emit unescaped quotes or cut off tokens.
+  - **Resilient Fallback Extractor (`extractMalformedCommandFallback`):** Added a tolerant regex extractor in `parser.js` capable of extracting `hermes_file_write` and `hermes_terminal` payloads even when unescaped double quotes or syntax slips inside large TSX/HTML/CSS code break strict `JSON.parse()`.
+  - **Cut-Off Recovery Fallback in `salvageCutOff`:** Embedded fallback command recovery directly into `salvageCutOff()`, rescuing truncated commands before they trigger parse error feedback.
+  - **Descriptive Model Guidance in `config.js`:** Augmented parse error notes with explicit guidance on escaping inner quotes (`\"`) and modular file chunking.
+
 ## [1.5.7] - 2026-11-05
 
 ### Fixed & Improved

@@ -61,13 +61,13 @@ const ZS = (() => {
         malformed:
           "ERROR: a GHS command was detected in your reply but its JSON could not be parsed. " +
           'Rewrite it as a single valid JSON object in plain text, exactly like {"command": "name", "params": {...}}' +
-          luaMalformed + ". You may add a short note around it. " +
-          "Please retry.",
+          luaMalformed + ". If writing code or files, make sure any inner double quotes are escaped as \\\"." +
+          " Please retry.",
         unclosed:
           "ERROR: your GHS command was cut off before it finished - the JSON object" +
           objAlt + " never closed, so it could not run. Rewrite the WHOLE command in one " +
           'piece as valid JSON, exactly like {"command": "name", "params": {...}}' +
-          luaUnclosed + ". Please retry.",
+          luaUnclosed + ". If output was too long, write files in smaller batches or modular files. Please retry.",
         luaOpener:
           "ERROR: you wrote the closing ###END_LUA### marker but not the opening ###LUA### marker, " +
           "so the Luau block was not detected and did not run. Put ###LUA### immediately BEFORE your " +

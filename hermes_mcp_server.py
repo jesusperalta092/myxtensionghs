@@ -2490,6 +2490,14 @@ def resolve_target_path(path: str) -> str:
     if not path:
         return ""
     raw = path.strip()
+
+    # 0. Expansión universal de tilde y variables de entorno (~, $HOME, %USERPROFILE%)
+    if raw.startswith("~"):
+        raw = os.path.expanduser(raw)
+    elif raw.startswith("$HOME"):
+        raw = raw.replace("$HOME", os.environ.get("USERPROFILE", os.path.expanduser("~")))
+    elif raw.startswith("%USERPROFILE%"):
+        raw = os.path.expandvars(raw)
     
     # 1. Interceptor de Memoria 3 Capas (SOUL.md, USER.md, MEMORY.md)
     bname = os.path.basename(raw.replace("\\", "/")).upper()
@@ -3604,7 +3612,17 @@ def _tool_batch_scaffold(arguments: Dict[str, Any]) -> Dict[str, Any]:
     de forma atómica, validando sintaxis JSON antes de escribir en disco.
     Reduce drásticamente el lag y el consumo de tokens en proyectos nuevos.
     """
-    root_dir = arguments.get("root") or arguments.get("root_dir") or arguments.get("project_dir") or ""
+    root_dir = (arguments.get("root") or arguments.get("root_dir") or 
+                arguments.get("project_dir") or arguments.get("project_name") or 
+                arguments.get("project") or arguments.get("name") or "")
+
+    if root_dir:
+        root_dir = os.path.expanduser(root_dir)
+        if not os.path.isabs(root_dir):
+            root_dir = os.path.normpath(os.path.join(get_base_workspace(), root_dir))
+        os.makedirs(root_dir, exist_ok=True)
+        set_active_workspace(root_dir)
+
     files = arguments.get("files") or arguments.get("bundle") or {}
 
     if not files:
@@ -3642,8 +3660,10 @@ def _tool_batch_scaffold(arguments: Dict[str, Any]) -> Dict[str, Any]:
     total_bytes = 0
     try:
         for rel_path, content in file_map.items():
-            full_path = os.path.join(root_dir, rel_path) if root_dir else rel_path
-            target_path = resolve_target_path(full_path)
+            if root_dir and not os.path.isabs(rel_path):
+                target_path = os.path.normpath(os.path.join(root_dir, rel_path))
+            else:
+                target_path = resolve_target_path(rel_path)
             os.makedirs(os.path.dirname(target_path), exist_ok=True)
             content_str = str(content) if not isinstance(content, str) else content
             with open(target_path, "w", encoding="utf-8", errors="replace") as f:
@@ -5098,7 +5118,8 @@ TOOLS = [
         "inputSchema": {
             "type": "object",
             "properties": {
-                "root": {"type": "string", "description": "Carpeta raíz o del proyecto (opcional)."},
+                "root": {"type": "string", "description": "Carpeta raíz o ruta del proyecto (opcional)."},
+                "project_name": {"type": "string", "description": "Nombre de la carpeta del proyecto a crear dentro de Descargas (ej: 'Proyecto_CasaAurelia_LaMolina')."},
                 "files": {"type": "object", "description": "Diccionario de rutas relativas y contenidos {'package.json': '...', 'vite.config.ts': '...'}"}
             },
             "required": ["files"]
