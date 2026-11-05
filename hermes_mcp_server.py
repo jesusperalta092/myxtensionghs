@@ -59,6 +59,13 @@ try:
 except Exception:
     user32 = None
 
+try:
+    import uiautomation as auto
+except Exception:
+    auto = None
+
+_UIA_REF_CACHE: Dict[str, Any] = {}
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Hermes Agent Native Integration (hermes-agent(mod))
 # ─────────────────────────────────────────────────────────────────────────────
@@ -913,6 +920,7 @@ def _tool_prospect_scrape(arguments: Dict[str, Any]) -> Dict[str, Any]:
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _tool_computer_use(arguments: Dict[str, Any]) -> Dict[str, Any]:
+    global _UIA_REF_CACHE
     action = arguments.get("action", "capture")
     
     if action == "capture":
@@ -1080,7 +1088,481 @@ def _tool_computer_use(arguments: Dict[str, Any]) -> Dict[str, Any]:
         else:
             return {"content": [{"type": "text", "text": f"No se encontró ninguna ventana visible con el nombre '{app_name}'."}], "isError": True}
 
+    # ── NUEVOS SUPERPODERES UIA (UI AUTOMATION SIN VISIÓN / AGENT-DESKTOP PATTERN) ──
+    elif action in ("inspect_tree", "uia_inspect"):
+        target_name = arguments.get("app") or arguments.get("window")
+        max_depth = int(arguments.get("max_depth", 4))
+        max_elements = int(arguments.get("max_elements", 50))
+
+        if not auto:
+            return {"content": [{"type": "text", "text": "Error: uiautomation no está disponible en este entorno."}], "isError": True}
+
+        target = None
+        if target_name:
+            target = auto.WindowControl(searchDepth=2, SubName=target_name)
+        else:
+            target = auto.GetForegroundControl()
+
+        if not target or not target.Exists(maxSearchSeconds=1):
+            root = auto.GetRootControl()
+            children = [c for c in root.GetChildren() if c.Name and c.ProcessId > 4]
+            if children:
+                target = children[0]
+            else:
+                return {"content": [{"type": "text", "text": "No se encontró ninguna ventana activa para inspeccionar con UI Automation."}], "isError": True}
+
+        elements = []
+        _UIA_REF_CACHE.clear()
+
+        def walk(ctrl, depth):
+            if depth > max_depth or len(elements) >= max_elements:
+                return
+            for child in ctrl.GetChildren():
+                if len(elements) >= max_elements:
+                    break
+                try:
+                    c_name = child.Name or ""
+                    c_type = (child.ControlTypeName or "").replace("Control", "")
+                    c_id = child.AutomationId or ""
+                    ref_id = f"@ref:{len(elements)}"
+                    rect = child.BoundingRectangle
+                    is_enabled = child.IsEnabled
+
+                    if c_name or c_id or c_type in ("Button", "Edit", "MenuItem", "CheckBox", "TabItem", "ListItem", "Hyperlink"):
+                        elem_info = {
+                            "ref": ref_id,
+                            "type": c_type,
+                            "name": c_name[:60],
+                            "automation_id": c_id[:50],
+                            "enabled": is_enabled,
+                            "rect": [rect.left, rect.top, rect.right, rect.bottom] if rect else None
+                        }
+                        elements.append(elem_info)
+                        _UIA_REF_CACHE[ref_id] = {
+                            "control": child,
+                            "name": c_name,
+                            "automation_id": c_id,
+                            "type": c_type,
+                            "rect": [rect.left, rect.top, rect.right, rect.bottom] if rect else None
+                        }
+                    walk(child, depth + 1)
+                except Exception:
+                    pass
+
+        walk(target, 1)
+        tree_result = {
+            "window": target.Name if target else "Unknown",
+            "process_id": target.ProcessId if target else None,
+            "elements_found": len(elements),
+            "elements": elements
+        }
+        return {"content": [{"type": "text", "text": json.dumps(tree_result, indent=2, ensure_ascii=False)}]}
+
+    elif action == "uia_click":
+        ref_id = arguments.get("ref_id") or arguments.get("ref")
+        name = arguments.get("name")
+
+        cached = _UIA_REF_CACHE.get(ref_id) if ref_id else None
+        target_ctrl = cached.get("control") if cached else None
+
+        if not target_ctrl and (name or ref_id):
+            search_str = name or (ref_id.replace("@ref:", "") if ref_id else "")
+            for r_k, r_v in _UIA_REF_CACHE.items():
+                if search_str.lower() in (r_v.get("name") or "").lower() or search_str == r_v.get("automation_id"):
+                    target_ctrl = r_v.get("control")
+                    cached = r_v
+                    break
+
+        if target_ctrl and auto:
+            try:
+                inv = target_ctrl.GetInvokePattern()
+                if inv:
+                    inv.Invoke()
+                    return {"content": [{"type": "text", "text": f"✓ [UIA Invoke] Clic ejecutado exitosamente en '{cached.get('name') or ref_id}' en segundo plano."}]}
+            except Exception:
+                pass
+            try:
+                target_ctrl.Click(simulateMove=False)
+                return {"content": [{"type": "text", "text": f"✓ [UIA Click] Clic determinista ejecutado en '{cached.get('name') or ref_id}'."}]}
+            except Exception:
+                pass
+
+        if cached and cached.get("rect") and pyautogui:
+            rect = cached["rect"]
+            cx = (rect[0] + rect[2]) // 2
+            cy = (rect[1] + rect[3]) // 2
+            pyautogui.click(cx, cy)
+            return {"content": [{"type": "text", "text": f"✓ [UIA Fallback] Clic realizado en coordenadas centrales [{cx}, {cy}]."}]}
+
+        return {"content": [{"type": "text", "text": f"Error: No se encontró el control con ref '{ref_id or name}'. Llama primero a 'inspect_tree'."}], "isError": True}
+
+    elif action in ("uia_set_value", "uia_type"):
+        ref_id = arguments.get("ref_id") or arguments.get("ref")
+        text = arguments.get("text", "")
+        name = arguments.get("name")
+
+        cached = _UIA_REF_CACHE.get(ref_id) if ref_id else None
+        target_ctrl = cached.get("control") if cached else None
+
+        if not target_ctrl and (name or ref_id):
+            search_str = name or (ref_id.replace("@ref:", "") if ref_id else "")
+            for r_k, r_v in _UIA_REF_CACHE.items():
+                if search_str.lower() in (r_v.get("name") or "").lower() or search_str == r_v.get("automation_id"):
+                    target_ctrl = r_v.get("control")
+                    cached = r_v
+                    break
+
+        if target_ctrl and auto:
+            try:
+                val_pat = target_ctrl.GetValuePattern()
+                if val_pat:
+                    val_pat.SetValue(text)
+                    return {"content": [{"type": "text", "text": f"✓ [UIA SetValue] Texto establecido en '{cached.get('name') or ref_id}' en segundo plano ({len(text)} caracteres)."}]}
+            except Exception:
+                pass
+            try:
+                target_ctrl.SendKeys(text)
+                return {"content": [{"type": "text", "text": f"✓ [UIA SendKeys] Texto enviado a '{cached.get('name') or ref_id}'."}]}
+            except Exception:
+                pass
+
+        if cached and cached.get("rect") and pyautogui:
+            rect = cached["rect"]
+            cx = (rect[0] + rect[2]) // 2
+            cy = (rect[1] + rect[3]) // 2
+            pyautogui.click(cx, cy)
+            time.sleep(0.05)
+            pyautogui.write(text, interval=0.01)
+            return {"content": [{"type": "text", "text": f"✓ [UIA Fallback Type] Clic en control y texto escrito ({len(text)} caracteres)."}]}
+
+        return {"content": [{"type": "text", "text": f"Error: No se encontró el control con ref '{ref_id or name}'. Llama primero a 'inspect_tree'."}], "isError": True}
+
+    elif action == "uia_list_windows":
+        windows = []
+        if auto:
+            try:
+                root = auto.GetRootControl()
+                for idx, child in enumerate(root.GetChildren()):
+                    try:
+                        name = child.Name
+                        pid = child.ProcessId
+                        if name and pid > 4:
+                            windows.append({
+                                "ref": f"@win:{idx}",
+                                "name": name,
+                                "pid": pid,
+                                "type": (child.ControlTypeName or "").replace("Control", ""),
+                                "class": child.ClassName
+                            })
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+
+        if not windows and user32 is not None:
+            import ctypes.wintypes
+            WNDENUMPROC = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.wintypes.HWND, ctypes.wintypes.LPARAM)
+            def enum_cb(hwnd, extra):
+                if user32.IsWindowVisible(hwnd):
+                    length = user32.GetWindowTextLengthW(hwnd)
+                    if length > 0:
+                        buff = ctypes.create_unicode_buffer(length + 1)
+                        user32.GetWindowTextW(hwnd, buff, length + 1)
+                        title = buff.value
+                        if title and title not in ("Program Manager", "Settings"):
+                            windows.append({"ref": f"@win:{len(windows)}", "hwnd": hwnd, "name": title})
+                return True
+            user32.EnumWindows(WNDENUMPROC(enum_cb), 0)
+
+        return {"content": [{"type": "text", "text": json.dumps({"count": len(windows), "windows": windows}, indent=2, ensure_ascii=False)}]}
+
     return {"content": [{"type": "text", "text": f"Acción desconocida '{action}'."}], "isError": True}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# GHS Knowledge Graph Engine (Graphify Pattern - Pure Python AST & Topology)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _tool_code_graph(arguments: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    USO EXCLUSIVO: Generación de Grafos de Conocimiento (Knowledge Graph) y análisis arquitectónico
+    de código fuente (Python, JS/TS, etc.). Mapea dependencias, funciones, clases, nodos centrales ('God Nodes')
+    y produce un resumen arquitectónico ultracompacto (compresión 70x) antes de editar código.
+    """
+    import ast
+    raw_path = arguments.get("path") or arguments.get("project_dir") or ""
+    mode = arguments.get("mode", "summary").lower().strip()
+    max_files = int(arguments.get("max_files", 60))
+    focus_module = arguments.get("focus_module", "").strip()
+
+    target_dir = resolve_target_path(raw_path) if raw_path else None
+    if not target_dir or not os.path.exists(target_dir):
+        target_dir = get_base_workspace()
+
+    if os.path.isfile(target_dir):
+        target_dir = os.path.dirname(target_dir)
+
+    nodes = {}
+    edges = []
+    total_lines = 0
+    file_count = 0
+
+    for root, dirs, files in os.walk(target_dir):
+        dirs[:] = [d for d in dirs if d not in (".git", "node_modules", "__pycache__", ".vscode", "dist", "build", "_temp", "logs", ".agents")]
+        for f in files:
+            if file_count >= max_files:
+                break
+            ext = os.path.splitext(f)[1].lower()
+            if ext in (".py", ".js", ".ts", ".jsx", ".tsx"):
+                fpath = os.path.join(root, f)
+                rel_path = os.path.relpath(fpath, target_dir).replace("\\", "/")
+                file_count += 1
+                try:
+                    with open(fpath, "r", encoding="utf-8", errors="replace") as fp:
+                        content = fp.read()
+                    lines = content.count("\n") + 1
+                    total_lines += lines
+
+                    mod_info = {
+                        "path": rel_path,
+                        "type": "python" if ext == ".py" else "javascript",
+                        "lines": lines,
+                        "classes": [],
+                        "functions": [],
+                        "imports": [],
+                        "in_degree": 0,
+                        "out_degree": 0
+                    }
+
+                    if ext == ".py":
+                        try:
+                            tree = ast.parse(content, filename=rel_path)
+                            for node in ast.walk(tree):
+                                if isinstance(node, ast.ClassDef):
+                                    mod_info["classes"].append(node.name)
+                                elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                                    mod_info["functions"].append(node.name)
+                                elif isinstance(node, ast.Import):
+                                    for alias in node.names:
+                                        mod_info["imports"].append(alias.name)
+                                elif isinstance(node, ast.ImportFrom):
+                                    if node.module:
+                                        mod_info["imports"].append(node.module)
+                        except Exception:
+                            pass
+                    else:
+                        imports = re.findall(r'''(?:import\s+.*?from\s+['"](.*?)['"]|require\(['"](.*?)['"]\))''', content)
+                        for imp1, imp2 in imports:
+                            target_imp = imp1 or imp2
+                            if target_imp:
+                                mod_info["imports"].append(target_imp)
+                        classes = re.findall(r'''\bclass\s+([A-Za-z0-9_$]+)''', content)
+                        mod_info["classes"].extend(classes)
+                        funcs = re.findall(r'''\b(?:function\s+([A-Za-z0-9_$]+)|(?:const|let|var)\s+([A-Za-z0-9_$]+)\s*=\s*(?:async\s*)?\([^)]*\)\s*=>)''', content)
+                        for f1, f2 in funcs:
+                            fn = f1 or f2
+                            if fn:
+                                mod_info["functions"].append(fn)
+
+                    nodes[rel_path] = mod_info
+                except Exception:
+                    pass
+
+    # Build dependency graph
+    for src_path, src_info in nodes.items():
+        src_stem = os.path.splitext(os.path.basename(src_path))[0]
+        for imp in src_info["imports"]:
+            imp_clean = imp.replace("\\", "/").rstrip("/")
+            imp_base = os.path.basename(imp_clean)
+            for target_path, target_info in nodes.items():
+                if target_path == src_path:
+                    continue
+                target_stem = os.path.splitext(os.path.basename(target_path))[0]
+                if (imp_base == target_stem) or (imp_clean in target_path) or (target_path.endswith(imp_clean + ".py")) or (target_path.endswith(imp_clean + ".js")):
+                    edges.append({"source": src_path, "target": target_path})
+                    src_info["out_degree"] += 1
+                    target_info["in_degree"] += 1
+                    break
+
+    if mode == "json":
+        return {"content": [{"type": "text", "text": json.dumps({"modules_count": len(nodes), "total_lines": total_lines, "nodes": nodes, "edges": edges}, indent=2, ensure_ascii=False)}]}
+
+    if mode == "module" and focus_module:
+        match_mod = None
+        for p, info in nodes.items():
+            if focus_module.lower() in p.lower():
+                match_mod = info
+                break
+        if match_mod:
+            incoming = [e["source"] for e in edges if e["target"] == match_mod["path"]]
+            outgoing = [e["target"] for e in edges if e["source"] == match_mod["path"]]
+            mod_doc = [
+                f"# Module Inspection: `{match_mod['path']}`",
+                f"- Lines: {match_mod['lines']} | Type: {match_mod['type']}",
+                f"- Classes: {', '.join(match_mod['classes']) if match_mod['classes'] else '(None)'}",
+                f"- Functions: {', '.join(match_mod['functions']) if match_mod['functions'] else '(None)'}",
+                f"- Imported By ({len(incoming)}): {', '.join(incoming) if incoming else '(Leaf module)'}",
+                f"- Calls / Depends on ({len(outgoing)}): {', '.join(outgoing) if outgoing else '(No internal deps)'}",
+            ]
+            return {"content": [{"type": "text", "text": "\n".join(mod_doc)}]}
+        else:
+            return {"content": [{"type": "text", "text": f"Módulo '{focus_module}' no encontrado en el grafo."}], "isError": True}
+
+    sorted_by_centrality = sorted(nodes.values(), key=lambda x: x["in_degree"] * 2 + x["out_degree"], reverse=True)
+    god_nodes = sorted_by_centrality[:6]
+
+    report = [
+        f"# Knowledge Graph & Codebase Architecture ({os.path.basename(target_dir)})",
+        f"• Total Analizado: {len(nodes)} módulos | ~{total_lines} líneas de código",
+        "",
+        "## 🏛️ God Nodes & Columna Vertebral Arquitectónica",
+    ]
+    for gn in god_nodes:
+        if gn["in_degree"] > 0 or gn["out_degree"] > 0:
+            report.append(f"- **`{gn['path']}`** ({gn['lines']} líneas): Conectado con {gn['in_degree']} consumidores, depende de {gn['out_degree']}.")
+            if gn["classes"]:
+                report.append(f"  • Clases: {', '.join(gn['classes'][:4])}")
+            if gn["functions"]:
+                report.append(f"  • Funciones clave: {', '.join(gn['functions'][:6])}")
+
+    report.append("\n## 🔗 Flujo Topológico de Dependencias")
+    seen_edges = set()
+    edge_lines = []
+    for edge in edges:
+        pair = (edge["source"], edge["target"])
+        if pair not in seen_edges:
+            seen_edges.add(pair)
+            edge_lines.append(f"- `{edge['source']}` ➔ `{edge['target']}`")
+    report.extend(edge_lines[:18])
+    if len(edge_lines) > 18:
+        report.append(f"... y {len(edge_lines) - 18} dependencias adicionales mapeadas.")
+
+    return {"content": [{"type": "text", "text": "\n".join(report)}]}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# GHS Persistent Planning & Recovery (Planning-with-files Pattern)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _tool_task_plan(arguments: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    USO EXCLUSIVO: Planificación persistente en disco (task_plan.md, findings.md, progress.md)
+    resistente a reinicios de sesión, crashes y saturación de contexto. Registra fases de trabajo,
+    descubrimientos técnicos y estado de ejecución paso a paso.
+    """
+    action = arguments.get("action", "status").lower().strip()
+    title = arguments.get("title", "")
+    steps = arguments.get("steps") or []
+    step_id = arguments.get("step_index") or arguments.get("step_name")
+    step_status = arguments.get("step_status", "completed")
+    finding = arguments.get("finding", "")
+    notes = arguments.get("notes", "")
+
+    proj_dir = arguments.get("project_dir", "")
+    if proj_dir:
+        proj_dir = resolve_target_path(proj_dir)
+    else:
+        proj_dir = os.path.join(get_base_workspace(), "agent_workspace")
+    os.makedirs(proj_dir, exist_ok=True)
+
+    plan_file = os.path.join(proj_dir, "task_plan.md")
+    findings_file = os.path.join(proj_dir, "findings.md")
+    progress_file = os.path.join(proj_dir, "progress.md")
+
+    ts = time.strftime("%Y-%m-%d %H:%M:%S")
+
+    if action == "init":
+        if not title:
+            title = "Plan de Ejecución Autónomo"
+        content_plan = [
+            f"# Plan de Tarea: {title}",
+            f"**Iniciado**: {ts} | **Estado**: EN PROGRESO",
+            "",
+            "## Fases y Pasos Planificados"
+        ]
+        if isinstance(steps, list) and steps:
+            for idx, s in enumerate(steps, 1):
+                content_plan.append(f"- [ ] Paso {idx}: {s}")
+        else:
+            content_plan.append("- [ ] Paso 1: Análisis y exploración de requerimientos")
+            content_plan.append("- [ ] Paso 2: Implementación modular y edición")
+            content_plan.append("- [ ] Paso 3: Validación preflight y pruebas")
+
+        with open(plan_file, "w", encoding="utf-8") as f:
+            f.write("\n".join(content_plan) + "\n")
+
+        if not os.path.exists(findings_file):
+            with open(findings_file, "w", encoding="utf-8") as f:
+                f.write(f"# Hallazgos Arquitectónicos & Restricciones ({title})\n*Iniciado: {ts}*\n\n")
+
+        with open(progress_file, "a", encoding="utf-8") as f:
+            f.write(f"[{ts}] Plan '{title}' inicializado con {len(steps) if steps else 3} pasos.\n")
+
+        return {"content": [{"type": "text", "text": f"✓ Plan inicializado exitosamente en '{plan_file}'. Archivos generados: task_plan.md, findings.md, progress.md."}]}
+
+    elif action == "add_finding":
+        if not finding:
+            return {"content": [{"type": "text", "text": "Error: 'finding' es requerido para add_finding."}], "isError": True}
+        with open(findings_file, "a", encoding="utf-8") as f:
+            f.write(f"- [{ts}] {finding}\n")
+        return {"content": [{"type": "text", "text": f"✓ Hallazgo registrado en '{findings_file}':\n• {finding}"}]}
+
+    elif action in ("update_step", "complete_step"):
+        if step_id is None:
+            return {"content": [{"type": "text", "text": "Error: 'step_index' o 'step_name' es requerido para update_step."}], "isError": True}
+        if not os.path.exists(plan_file):
+            return {"content": [{"type": "text", "text": "Error: task_plan.md no existe. Llama primero a action='init'."}], "isError": True}
+
+        with open(plan_file, "r", encoding="utf-8") as f:
+            lines = f.readlines()
+
+        updated = False
+        mark = "[x]" if step_status in ("completed", "done") else ("[/]" if step_status in ("in_progress", "active") else "[ ]")
+
+        new_lines = []
+        for line in lines:
+            match = False
+            if isinstance(step_id, int) and f"Paso {step_id}:" in line:
+                match = True
+            elif str(step_id).lower() in line.lower():
+                match = True
+
+            if match:
+                clean_line = re.sub(r"- \[[ x/]\]", f"- {mark}", line).strip()
+                if notes:
+                    clean_line += f" (Nota: {notes})"
+                new_lines.append(clean_line + "\n")
+                updated = True
+            else:
+                new_lines.append(line)
+
+        if updated:
+            with open(plan_file, "w", encoding="utf-8") as f:
+                f.writelines(new_lines)
+            with open(progress_file, "a", encoding="utf-8") as f:
+                f.write(f"[{ts}] Paso '{step_id}' actualizado a '{step_status}' {f'- {notes}' if notes else ''}\n")
+            return {"content": [{"type": "text", "text": f"✓ Paso '{step_id}' actualizado a '{step_status}' en '{plan_file}'."}]}
+        else:
+            return {"content": [{"type": "text", "text": f"No se encontró el paso '{step_id}' en task_plan.md."}], "isError": True}
+
+    elif action == "status":
+        out = []
+        if os.path.exists(plan_file):
+            with open(plan_file, "r", encoding="utf-8", errors="replace") as f:
+                out.append(f.read().strip())
+        else:
+            out.append("No hay un plan activo actualmente. Usa action='init' para crear uno.")
+
+        if os.path.exists(findings_file):
+            with open(findings_file, "r", encoding="utf-8", errors="replace") as f:
+                text_f = f.read().strip()
+                if len(text_f) > 50:
+                    out.append("\n" + text_f)
+
+        return {"content": [{"type": "text", "text": "\n\n".join(out)}]}
+
+    return {"content": [{"type": "text", "text": f"Acción desconocida '{action}' para hermes_task_plan."}], "isError": True}
+
 
 
 def _inspect_dom_telemetry(url: str) -> Dict[str, Any]:
@@ -3747,31 +4229,47 @@ TOOLS = [
     },
     {
         "name": "hermes_computer_use",
-        "description": "Controla el escritorio de Windows con IA: toma capturas de pantalla de alta resolución, haz clics, doble clics, escribe texto con teclado, presiona combinaciones de teclas (win+r, ctrl+c), lista ventanas activas y enfoca aplicaciones.",
+        "description": "USO EXCLUSIVO: Control e inspección del sistema operativo Windows y aplicaciones de escritorio nativas (.exe, Explorador de archivos, Excel, Bloc de Notas, diálogos del sistema) usando el Árbol de Accesibilidad (UI Automation) e interacción determinista sin visión. NUNCA usar para navegar por sitios web ni hacer scraping (para la web usa 'hermes_stealth_scrape' o 'hermes_ui_inspect').",
         "inputSchema": {
             "type": "object",
             "properties": {
                 "action": {
                     "type": "string",
-                    "enum": ["capture", "click", "double_click", "right_click", "type", "key", "scroll", "list_windows", "focus_app"],
-                    "description": "Acción a realizar sobre Windows."
+                    "enum": ["inspect_tree", "uia_click", "uia_set_value", "uia_list_windows", "capture", "click", "double_click", "right_click", "type", "key", "scroll", "list_windows", "focus_app"],
+                    "description": "Acción a realizar: 'inspect_tree' (extrae jerarquía UIA con @ref IDs), 'uia_click' (clic determinista por @ref o nombre en segundo plano), 'uia_set_value' (escribe texto en control por @ref), 'uia_list_windows' (lista ventanas), o acciones legacy de cursor/teclado ('capture', 'click', 'type', 'key', 'focus_app')."
+                },
+                "ref_id": {
+                    "type": "string",
+                    "description": "ID del control de accesibilidad obtenido con 'inspect_tree' (ej: '@ref:0', '@ref:4')."
+                },
+                "name": {
+                    "type": "string",
+                    "description": "Nombre o texto visible del control para uia_click o uia_set_value."
+                },
+                "app": {
+                    "type": "string",
+                    "description": "Nombre o título de la ventana objetivo para 'inspect_tree' o 'focus_app'."
+                },
+                "text": {
+                    "type": "string",
+                    "description": "Texto para escribir con 'uia_set_value' o 'type'."
+                },
+                "max_depth": {
+                    "type": "integer",
+                    "description": "Profundidad máxima del árbol UIA para 'inspect_tree' (por defecto: 4)."
+                },
+                "max_elements": {
+                    "type": "integer",
+                    "description": "Cantidad máxima de elementos a retornar para 'inspect_tree' (por defecto: 50)."
                 },
                 "coordinate": {
                     "type": "array",
                     "items": {"type": "integer"},
-                    "description": "[x, y] coordenadas en píxeles para clics."
-                },
-                "text": {
-                    "type": "string",
-                    "description": "Texto para escribir con 'type'."
+                    "description": "[x, y] coordenadas en píxeles para clics legacy."
                 },
                 "key": {
                     "type": "string",
                     "description": "Tecla o combinación ('enter', 'ctrl+c', 'win+r', 'alt+tab')."
-                },
-                "app": {
-                    "type": "string",
-                    "description": "Nombre o título de la ventana a enfocar para 'focus_app'."
                 },
                 "scroll_amount": {
                     "type": "integer",
@@ -3897,7 +4395,7 @@ TOOLS = [
     },
     {
         "name": "hermes_ui_inspect",
-        "description": "Superpoder de Visión & Auditoría Estética Integral (Desktop, Mobile, Scroll vertical y Full-Page): abre la aplicación web en ejecución (ej: 'http://localhost:5173') con Chrome Headless. Permite capturar la página completa de arriba a abajo ('full_page': true), desplazarse/hacer scroll a cualquier altura o sección ('scroll_y': 800, 'middle', 'bottom'), auditar vistas móviles ('device': 'mobile') y extraer la jerarquía DOM/CSS en tiempo real para que la IA audite y perfeccione la estética, tipografía, contrastes, iconografía y responsividad.",
+        "description": "USO EXCLUSIVO: Inspección visual y del DOM de páginas web o servidores de desarrollo locales (React/Vite/Next en localhost) con Chrome Headless. Permite capturar la página completa ('full_page': true), hacer scroll ('scroll_y'), auditar vistas móviles ('device': 'mobile') y extraer la jerarquía DOM/CSS en tiempo real. NUNCA usar para aplicaciones de escritorio nativas de Windows ni para scraping masivo de URLs externas.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -3962,7 +4460,7 @@ TOOLS = [
     },
     {
         "name": "hermes_stealth_scrape",
-        "description": "Motor de scraping web y búsqueda avanzada de alta resiliencia (Anti-Bot Bypass con Google Chrome/Playwright). Permite buscar en la web (DuckDuckGo/Google), extraer resultados orgánicos sin anuncios, evadir Cloudflare/Akamai/Datadome/CAPTCHAs, inspeccionar perfiles o páginas protegidas (Instagram, Twitter, LinkedIn, tiendas e-commerce, portales de noticias), extraer selectores CSS personalizados, metadatos OpenGraph/SEO, texto limpio, verificar keywords, tomar capturas de pantalla de evidencia y exportar directamente a JSON o CSV (compatible con Excel).",
+        "description": "USO EXCLUSIVO: Scraping web furtivo y búsqueda avanzada de alta resiliencia con Playwright/Chrome y antibot bypass (Cloudflare, Akamai, Datadome, captchas). Permite extraer resultados de DuckDuckGo/Google, inspeccionar perfiles/tiendas protegidas, extraer selectores CSS, metadatos SEO y texto limpio. NUNCA usar para controlar el escritorio de Windows ni interactuar con software local (.exe).",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -4234,6 +4732,77 @@ TOOLS = [
                 }
             }
         }
+    },
+    {
+        "name": "hermes_code_graph",
+        "description": "USO EXCLUSIVO: Generación de Grafos de Conocimiento (Knowledge Graph) y análisis arquitectónico de código fuente (Python, JS/TS). Mapea dependencias, funciones, clases, nodos centrales ('God Nodes') y produce un resumen arquitectónico ultracompacto (compresión 70x) antes de editar código. NUNCA usar para ejecutar comandos o leer archivos individuales.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "path": {
+                    "type": "string",
+                    "description": "Ruta del proyecto o directorio a analizar (por defecto: espacio de trabajo activo)."
+                },
+                "mode": {
+                    "type": "string",
+                    "enum": ["summary", "json", "module"],
+                    "description": "'summary' para reporte markdown ultracompacto con God Nodes y dependencias, 'json' para grafo crudo con nodos y aristas, 'module' para inspeccionar a fondo un módulo específico."
+                },
+                "max_files": {
+                    "type": "integer",
+                    "description": "Cantidad máxima de archivos a escanear (por defecto: 60)."
+                },
+                "focus_module": {
+                    "type": "string",
+                    "description": "Nombre del archivo o módulo a inspeccionar en detalle si mode='module'."
+                }
+            }
+        }
+    },
+    {
+        "name": "hermes_task_plan",
+        "description": "USO EXCLUSIVO: Planificación persistente en disco (task_plan.md, findings.md, progress.md) resistente a reinicios de sesión, crashes y saturación de contexto. Registra fases de trabajo, descubrimientos técnicos y estado de ejecución paso a paso.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string",
+                    "enum": ["init", "update_step", "add_finding", "status"],
+                    "description": "Acción a realizar: 'init' (iniciar nuevo plan de tarea), 'update_step' (marcar paso como completado/en progreso), 'add_finding' (registrar hallazgo arquitectónico o regla en findings.md), 'status' (leer resumen del plan activo)."
+                },
+                "title": {
+                    "type": "string",
+                    "description": "Título u objetivo central de la tarea para 'init'."
+                },
+                "steps": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Lista de pasos o fases planificadas para 'init'."
+                },
+                "step_index": {
+                    "type": ["integer", "string"],
+                    "description": "Número o nombre del paso a actualizar (ej: 1, 'Paso 2', 'Implementación')."
+                },
+                "step_status": {
+                    "type": "string",
+                    "enum": ["pending", "in_progress", "completed", "blocked"],
+                    "description": "Nuevo estado del paso para 'update_step'."
+                },
+                "finding": {
+                    "type": "string",
+                    "description": "Descubrimiento técnico, lección o restricción a guardar en findings.md."
+                },
+                "notes": {
+                    "type": "string",
+                    "description": "Notas o comentarios adicionales al actualizar un paso."
+                },
+                "project_dir": {
+                    "type": "string",
+                    "description": "Directorio del proyecto donde residen los archivos de plan (opcional)."
+                }
+            },
+            "required": ["action"]
+        }
     }
 ]
 
@@ -4353,6 +4922,10 @@ def main():
                     res = _tool_prospect_scrape(args)
                 elif name in ("hermes_video_to_playbook", "video_to_playbook"):
                     res = _tool_video_to_playbook(args)
+                elif name in ("hermes_code_graph", "code_graph"):
+                    res = _tool_code_graph(args)
+                elif name in ("hermes_task_plan", "task_plan"):
+                    res = _tool_task_plan(args)
                 elif name == "android_sync_artifacts":
                     res = _tool_android_sync_artifacts(args)
                 elif name == "android_build_apk":
