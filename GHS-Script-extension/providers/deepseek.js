@@ -897,8 +897,8 @@ const ZSProvider = (() => {
   // insert the chip: {parent, ref} - or null if no tool block was found.
   function findToolBlockSpot(item, chip) {
     const P = ZSParse;
-    const hasStart = (t) => P.LUA_START_RE.test(t) || t.includes("###mcp_tool###");
-    const hasEnd = (t) => P.LUA_END_RE.test(t) || t.includes("###end_mcp_tool###") || t.includes("###end-mcp_tool###");
+    const hasStart = (t) => P.LUA_START_RE.test(t) || t.includes("###mcp_tool###") || /<[a-z0-9_-]*(?:hermes_|tool_call|command)/i.test(t);
+    const hasEnd = (t) => P.LUA_END_RE.test(t) || t.includes("###end_mcp_tool###") || t.includes("###end-mcp_tool###") || /<\/[a-z0-9_-]*(?:hermes_|tool_call|command)/i.test(t);
     const isJson = (t) => /\{\s*"(?:command|tool)"\s*:/.test(t);
     // DeepSeek's own DSML tool-call markup (see ZSParse.DSML_RE). It is NOT a
     // fenced block and NOT JSON - it renders as ordinary prose paragraphs - so
@@ -919,9 +919,10 @@ const ZSProvider = (() => {
         const tLow = txt.toLowerCase();
         const startsBlock = hasStart(tLow);
         const startsDsml = isDsml(txt);
-        if (!startsBlock && !isJson(txt) && !startsDsml) { i++; continue; }
+        const jsonBlock = isJson(txt);
+        if (!startsBlock && !jsonBlock && !startsDsml) { i++; continue; }
         // Found the start of a tool block. Hide this child…
-        const runStart = i;
+        let runStart = i;
         let runEnd = i;
         if (startsDsml) {
           // DSML has no end marker to look for - the block IS the run of
@@ -929,12 +930,21 @@ const ZSProvider = (() => {
           let j = i + 1;
           while (j < kids.length && isDsml(kids[j].textContent || "")) { runEnd = j; j++; }
         } else if (startsBlock && !hasEnd(tLow)) {
-          // multi-element LUA/MCP block → extend until the end marker (or, if the
+          // multi-element LUA/MCP/Hermes tag block → extend until the end marker (or, if the
           // turn is still truncated, to the end of this container).
           let j = i + 1;
           runEnd = kids.length - 1;
           for (; j < kids.length; j++) {
             if (hasEnd((kids[j].textContent || "").toLowerCase())) { runEnd = j; break; }
+          }
+        } else if (jsonBlock) {
+          // Check if previous sibling was an opening tag like <hermes_terminal>
+          if (runStart > 0 && hasStart((kids[runStart - 1].textContent || "").toLowerCase())) {
+            runStart--;
+          }
+          // Check if next sibling is a closing tag like </hermes_terminal>
+          if (runEnd + 1 < kids.length && hasEnd((kids[runEnd + 1].textContent || "").toLowerCase())) {
+            runEnd++;
           }
         }
         for (let k = runStart; k <= runEnd; k++) {

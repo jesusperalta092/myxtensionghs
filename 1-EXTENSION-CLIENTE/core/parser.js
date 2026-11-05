@@ -452,6 +452,7 @@ const ZSParse = (() => {
            LUA_START_RE.test(txt) ||
            DSML_RE.test(txt) ||
            CMD_KEY_RE.test(txt) ||
+           /<[\/]?[a-z0-9_-]*(?:hermes_|tool_call|command)/i.test(txt) ||
            KNOWN_NAME_TOOL_RE.test(txt); // command/tool with OR without params (e.g. list_commands)
   }
 
