@@ -2,6 +2,15 @@
 
 All notable changes to GHS Free are documented here.
 
+## [1.5.6] - 2026-11-05
+
+### Added
+- **hermes_ui_inspect: Deep Interactive UI Auditor & Universal Topologic Engine:**
+  - **Interactive State Traversal:** Automatically discovers and triggers interactive elements (cards, table rows, action buttons, modals, drawers, tabs, and flyouts) without hardcoded rules, generating a dual-snapshot report (`ghs_ui_snapshot.png` and `ghs_ui_snapshot_interactive.png`).
+  - **Zero Code Leaks Engine (Cazador Antifugas de Código):** Evaluates live DOM text nodes to catch uncompiled template variables (`{{...}}`, `${...}`), unresolved JavaScript values (`undefined`, `null`, `NaN`, `[object Object]`), unrendered raw HTML, and broken/failed images (404/naturalWidth=0).
+  - **Modal & Drawer Ergonomic Heuristics:** Measures viewport ratios of dialog hero banners vs. content area. Flags when images take >38% of modal height, mandates 2-column horizontal split architectures in desktop, and checks for accessible close buttons and internal vertical scrollbars.
+  - **Universal System Topology:** Auto-detects application navigation modules, views, data tables, forms, inputs, and structural sections across CRMs, SaaS dashboards, and web applications.
+
 ## [1.5.5] - 2026-09-10
 
 ### Fixed

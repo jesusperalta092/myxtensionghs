@@ -1642,6 +1642,21 @@ def _inspect_dom_telemetry(url: str) -> Dict[str, Any]:
 def _tool_ui_inspect(arguments: Dict[str, Any]) -> Dict[str, Any]:
     url = arguments.get("url", "").strip()
     
+    # Audit options
+    audit_interactive_arg = arguments.get("audit_interactive", True)
+    if isinstance(audit_interactive_arg, str):
+        audit_interactive = audit_interactive_arg.lower() not in ("false", "0", "no")
+    else:
+        audit_interactive = bool(audit_interactive_arg)
+
+    audit_code_leaks_arg = arguments.get("audit_code_leaks", True)
+    if isinstance(audit_code_leaks_arg, str):
+        audit_code_leaks = audit_code_leaks_arg.lower() not in ("false", "0", "no")
+    else:
+        audit_code_leaks = bool(audit_code_leaks_arg)
+
+    click_target = (arguments.get("click_target") or arguments.get("target_action") or arguments.get("target_selector") or "").strip()
+
     # Handle wait time (support wait_ms or wait_seconds)
     wait_ms = arguments.get("wait_ms")
     if wait_ms is not None:
@@ -1675,7 +1690,6 @@ def _tool_ui_inspect(arguments: Dict[str, Any]) -> Dict[str, Any]:
         else:
             full_page = bool(full_page_arg)
     else:
-        # Default: if scrolling requested, false; otherwise true (full page audit)
         is_scrolling = scroll_y_raw not in (0, "0", None, False, "")
         full_page = not is_scrolling
 
@@ -1702,7 +1716,6 @@ def _tool_ui_inspect(arguments: Dict[str, Any]) -> Dict[str, Any]:
             except Exception:
                 pass
 
-        # If no local port is active, look for recent index.html in Downloads or workspace
         if not server_found:
             downloads = os.path.join(os.path.expanduser("~"), "Downloads")
             recent_html = None
@@ -1743,8 +1756,16 @@ def _tool_ui_inspect(arguments: Dict[str, Any]) -> Dict[str, Any]:
     }
     viewport_width, viewport_height = devices.get(device, (1440, 900))
     img_bytes = None
+    interactive_img_bytes = None
     full_img = None
     width, height = viewport_width, viewport_height
+
+    console_warnings_errors = []
+    runtime_errors = []
+    code_leaks_data = {"leaks": [], "brokenImgs": []}
+    topology_data = {"views": [], "tables": 0, "forms": 0, "inputs": 0, "buttons": 0, "sections": []}
+    interactive_diag = None
+    target_action_desc = ""
 
     # ── Method 1: Playwright Chromium (Pixel-Perfect, True Scroll, True Full Page, JS/CSS-Aware) ──
     if url and (url.startswith("http://") or url.startswith("https://") or url.startswith("file://")):
@@ -1764,6 +1785,19 @@ def _tool_ui_inspect(arguments: Dict[str, Any]) -> Dict[str, Any]:
                     )
                 )
                 pw_page = pw_context.new_page()
+
+                def _log_console(msg):
+                    if msg.type in ("error", "warning"):
+                        txt = msg.text
+                        if any(k in txt.lower() for k in ["uncaught", "typeerror", "referenceerror", "syntaxerror", "failed to load", "404", "500", "error:", "null", "undefined"]):
+                            console_warnings_errors.append(f"[{msg.type.upper()}] {txt[:200]}")
+
+                def _log_page_error(err):
+                    runtime_errors.append(str(err)[:250])
+
+                pw_page.on("console", _log_console)
+                pw_page.on("pageerror", _log_page_error)
+
                 pw_page.goto(url, wait_until="load", timeout=14000)
                 
                 # 1. Wait for network requests to settle (images, webfonts, APIs)
@@ -1805,7 +1839,7 @@ def _tool_ui_inspect(arguments: Dict[str, Any]) -> Dict[str, Any]:
                             `;
                             document.head.appendChild(s);
 
-                            // Force any element stuck with opacity 0 (e.g. Framer Motion initial='hidden') to full visibility
+                            // Force any element stuck with opacity 0 to full visibility
                             document.querySelectorAll('*').forEach(el => {
                                 const comp = window.getComputedStyle(el);
                                 if (comp.opacity === '0' || comp.opacity === '0.0') {
@@ -1822,10 +1856,10 @@ def _tool_ui_inspect(arguments: Dict[str, Any]) -> Dict[str, Any]:
 
                 pw_page.wait_for_timeout(int(max(0.4, min(wait_seconds, 2.5)) * 1000))
 
+                # 4. Take base page screenshot
                 if full_page:
                     img_bytes = pw_page.screenshot(full_page=True)
                 else:
-                    # Precise section / scroll navigation
                     if scroll_y_raw not in (0, "0", None, False, ""):
                         pw_page.evaluate("""(target) => {
                             if (typeof target === 'number' || /^\\d+$/.test(target)) {
@@ -1845,7 +1879,6 @@ def _tool_ui_inspect(arguments: Dict[str, Any]) -> Dict[str, Any]:
                                 window.scrollTo(0, 0);
                                 return;
                             }
-                            // Search by ID or querySelector
                             const el = document.getElementById(str) ||
                                        document.querySelector('#' + str) ||
                                        document.querySelector('[id*="' + str + '"]') ||
@@ -1858,6 +1891,174 @@ def _tool_ui_inspect(arguments: Dict[str, Any]) -> Dict[str, Any]:
                         pw_page.wait_for_timeout(500)
 
                     img_bytes = pw_page.screenshot(full_page=False)
+
+                # 5. Extract Code Leaks & Null-Safety in visible DOM
+                if audit_code_leaks:
+                    try:
+                        code_leaks_data = pw_page.evaluate("""() => {
+                            const leaks = [];
+                            const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null, false);
+                            let n;
+                            while (n = walker.nextNode()) {
+                                const val = (n.nodeValue || '').trim();
+                                if (!val) continue;
+                                const parent = n.parentElement;
+                                if (!parent) continue;
+                                const tag = parent.tagName.toLowerCase();
+                                if (['script', 'style', 'noscript', 'code', 'pre'].includes(tag)) continue;
+                                
+                                if (/\\{\\{[a-zA-Z0-9_\\.\\s]+\\}\\}/.test(val)) {
+                                    leaks.push(`Fuga de variable de plantilla sin compilar: "${val.slice(0, 50)}" en <${tag}>`);
+                                } else if (/\\$\\{[a-zA-Z0-9_\\.\\s]+\\}/.test(val)) {
+                                    leaks.push(`Fuga de template literal ES6 sin evaluar: "${val.slice(0, 50)}" en <${tag}>`);
+                                } else if (/\\b(undefined|null|NaN|\\[object Object\\])\\b/.test(val) && val.length < 60) {
+                                    leaks.push(`Fuga de valor JS no resuelto: "${val.slice(0, 50)}" en <${tag}>`);
+                                } else if (/(&lt;[a-z]+|&gt;|<\\/?[a-z]{1,8}>)/i.test(val)) {
+                                    leaks.push(`HTML crudo sin renderizar visible: "${val.slice(0, 50)}" en <${tag}>`);
+                                }
+                                if (leaks.length >= 6) break;
+                            }
+                            const brokenImgs = [];
+                            document.querySelectorAll('img').forEach(img => {
+                                if (img.src && ((img.complete && img.naturalWidth === 0) || !img.src.trim())) {
+                                    brokenImgs.push(img.src.slice(0, 70) || '(img sin src)');
+                                }
+                            });
+                            return { leaks, brokenImgs: brokenImgs.slice(0, 4) };
+                        }""")
+                    except Exception:
+                        pass
+
+                # 6. Extract Universal Topologic Mapping
+                try:
+                    topology_data = pw_page.evaluate("""() => {
+                        const top = {
+                            views: [],
+                            tables: document.querySelectorAll('table, [role="table"], [role="grid"]').length,
+                            forms: document.querySelectorAll('form').length,
+                            inputs: document.querySelectorAll('input:not([type="hidden"]), select, textarea').length,
+                            buttons: document.querySelectorAll('button, [role="button"], a.btn, a.button').length,
+                            sections: []
+                        };
+                        document.querySelectorAll('nav, aside, [role="navigation"], [role="tablist"]').forEach(n => {
+                            const items = Array.from(n.querySelectorAll('a, button, [role="tab"]')).map(x => x.innerText.trim()).filter(x => x.length > 0 && x.length < 25);
+                            if (items.length > 0) {
+                                top.views.push(...items.slice(0, 8));
+                            }
+                        });
+                        top.views = [...new Set(top.views)].slice(0, 8);
+                        document.querySelectorAll('header, main, section, article, footer, [id]').forEach(s => {
+                            const id = s.id ? '#' + s.id : '';
+                            const h = s.querySelector('h1, h2, h3');
+                            const hTxt = h ? h.innerText.trim().slice(0, 30) : '';
+                            if (id || (hTxt && s.tagName.toLowerCase() === 'section')) {
+                                top.sections.push(`${s.tagName.toLowerCase()}${id ? ' (' + id + ')' : ''}${hTxt ? ': "' + hTxt + '"' : ''}`);
+                            }
+                        });
+                        top.sections = [...new Set(top.sections)].slice(0, 8);
+                        return top;
+                    }""")
+                except Exception:
+                    pass
+
+                # 7. Deep Interactive Audit (Trigger Click & Inspect Modal/Drawer/Internal State)
+                if audit_interactive:
+                    try:
+                        target_info = pw_page.evaluate("""(customSel) => {
+                            if (customSel) {
+                                const el = document.querySelector(customSel);
+                                if (el) return { action: 'click', selector: customSel, index: 0, text: (el.innerText || '').slice(0, 30) };
+                            }
+                            const existingModal = document.querySelector('dialog[open], [role="dialog"], .modal.active, .modal.show, [class*="modal"][style*="display: block"], [class*="modal"][style*="display: flex"], [class*="drawer"][style*="display: block"], [class*="drawer"][style*="display: flex"]');
+                            if (existingModal && existingModal.getBoundingClientRect().height > 50) {
+                                return { action: 'already_open' };
+                            }
+                            const prioritySelectors = [
+                                '[data-modal]', '[data-modal-target]', '[data-toggle="modal"]', '[data-target*="modal"]',
+                                'button[onclick*="modal" i]', 'button[onclick*="open" i]', 'button[onclick*="detail" i]', 'button[onclick*="ver" i]',
+                                '.card[onclick]', '.property-card[onclick]', '.item-card[onclick]',
+                                'article[onclick]', 'tr[onclick]', 'tr[data-id]',
+                                '.card button', '.property-card button', '.item-card button',
+                                'button:not([disabled])', '[role="button"]'
+                            ];
+                            for (const sel of prioritySelectors) {
+                                const els = document.querySelectorAll(sel);
+                                for (let i = 0; i < els.length; i++) {
+                                    const el = els[i];
+                                    const r = el.getBoundingClientRect();
+                                    const s = window.getComputedStyle(el);
+                                    if (r.width > 20 && r.height > 20 && s.display !== 'none' && s.visibility !== 'hidden' && s.opacity !== '0') {
+                                        return { action: 'click', selector: sel, index: i, text: (el.innerText || el.getAttribute('aria-label') || '').trim().slice(0, 30) };
+                                    }
+                                }
+                            }
+                            return { action: 'none' };
+                        }""", click_target)
+
+                        if target_info and target_info.get("action") == "click":
+                            target_action_desc = f"Elemento activado: '{target_info.get('text') or target_info.get('selector')}'"
+                            try:
+                                loc = pw_page.locator(target_info["selector"]).nth(target_info.get("index", 0))
+                                loc.scroll_into_view_if_needed(timeout=1500)
+                                pw_page.wait_for_timeout(200)
+                                loc.click(timeout=2500)
+                                pw_page.wait_for_timeout(800)
+                            except Exception:
+                                pass
+
+                        interactive_diag = pw_page.evaluate("""() => {
+                            const candidates = document.querySelectorAll('dialog[open], [role="dialog"], .modal, .modal-overlay, .drawer, .sheet, .popup, [id*="modal" i], [class*="modal" i], [class*="drawer" i]');
+                            for (const el of candidates) {
+                                const r = el.getBoundingClientRect();
+                                const s = window.getComputedStyle(el);
+                                if (r.width > 120 && r.height > 100 && s.display !== 'none' && s.visibility !== 'hidden' && s.opacity !== '0') {
+                                    const box = el.querySelector('.modal-box, .modal-content, .modal-dialog, .modal-card, [class*="modal-content"], [class*="modal-box"], [class*="dialog"]') || el;
+                                    const boxR = box.getBoundingClientRect();
+                                    const boxStyle = window.getComputedStyle(box);
+
+                                    const heroImg = box.querySelector('img, [class*="hero" i], [class*="banner" i], [class*="image" i], [class*="img" i], [class*="media" i]');
+                                    let imgH = 0;
+                                    let imgRatio = 0;
+                                    if (heroImg) {
+                                        const ir = heroImg.getBoundingClientRect();
+                                        imgH = Math.round(ir.height);
+                                        if (boxR.height > 0) imgRatio = Number((ir.height / boxR.height).toFixed(2));
+                                    }
+                                    const hasScroll = box.scrollHeight > (box.clientHeight + 20);
+
+                                    let closeBtn = el.querySelector('button[aria-label*="close" i], button[aria-label*="cerrar" i], .close, .modal-close, [data-close], [data-dismiss]');
+                                    if (!closeBtn) {
+                                        const allBtns = el.querySelectorAll('button, a, span');
+                                        for (const b of allBtns) {
+                                            const txt = (b.innerText || '').trim();
+                                            if (['×', 'X', 'x', '✕', 'Cerrar', 'Close'].includes(txt)) {
+                                                closeBtn = b;
+                                                break;
+                                            }
+                                        }
+                                    }
+
+                                    return {
+                                        found: true,
+                                        tag: el.tagName.toLowerCase(),
+                                        title: (box.querySelector('h1, h2, h3, .title, .modal-title, strong')?.innerText || '').trim().slice(0, 40),
+                                        w: Math.round(boxR.width),
+                                        h: Math.round(boxR.height),
+                                        imgHeight: imgH,
+                                        imgRatio: imgRatio,
+                                        hasScroll: hasScroll,
+                                        hasCloseBtn: !!closeBtn,
+                                        isTwoColumn: (boxStyle.display.includes('grid') || boxStyle.display.includes('flex')) && (box.children.length >= 2)
+                                    };
+                                }
+                            }
+                            return { found: false };
+                        }""")
+
+                        if interactive_diag and interactive_diag.get("found"):
+                            interactive_img_bytes = pw_page.screenshot(full_page=False)
+                    except Exception:
+                        pass
 
                 pw_browser.close()
                 if img_bytes and Image is not None:
@@ -1979,12 +2180,13 @@ def _tool_ui_inspect(arguments: Dict[str, Any]) -> Dict[str, Any]:
                         shutil.rmtree(temp_profile, ignore_errors=True)
                     except Exception:
                         pass
+
     if not img_bytes:
         return {
             "content": [
                 {
                     "type": "text",
-                    "text": f"Error en hermes_ui_inspect: No se pudo conectar a '{url}' ni renderizar la página con Chrome Headless.\n• Si es un proyecto React/Vite, asegúrate de haber ejecutado 'npm run dev' con hermes_terminal (is_daemon: true) en el puerto 5173.\n• Si es un archivo HTML estático, especifica la ruta del archivo (ej: 'index.html')."
+                    "text": f"Error en hermes_ui_inspect: No se pudo conectar a '{url}' ni renderizar la página con Chrome Headless.\n• Si es un proyecto React/Vite, asegúrate de haber ejecutado el servidor con hermes_dev_server(action='start', dir=...) o hermes_terminal(is_daemon=True).\n• Si es un archivo HTML estático, especifica la ruta del archivo (ej: 'index.html')."
                 }
             ],
             "isError": True
@@ -1992,6 +2194,7 @@ def _tool_ui_inspect(arguments: Dict[str, Any]) -> Dict[str, Any]:
 
     if img_bytes:
         save_path_msg = ""
+        interactive_path_msg = ""
         try:
             downloads_dir = os.path.join(os.path.expanduser("~"), "Downloads")
             save_path = os.path.join(downloads_dir, "ghs_ui_snapshot.png")
@@ -2000,7 +2203,13 @@ def _tool_ui_inspect(arguments: Dict[str, Any]) -> Dict[str, Any]:
             if full_img is not None:
                 full_path = os.path.join(downloads_dir, "ghs_ui_snapshot_full.png")
                 full_img.save(full_path)
-            save_path_msg = f"Guardada en: {save_path}"
+            save_path_msg = f"• Captura Principal: {save_path}"
+
+            if interactive_img_bytes:
+                interactive_path = os.path.join(downloads_dir, "ghs_ui_snapshot_interactive.png")
+                with open(interactive_path, "wb") as f:
+                    f.write(interactive_img_bytes)
+                interactive_path_msg = f"• Captura Estado Interno / Modal: {interactive_path}"
         except Exception:
             pass
 
@@ -2047,38 +2256,128 @@ def _tool_ui_inspect(arguments: Dict[str, Any]) -> Dict[str, Any]:
             telemetry_lines = [
                 f"✓ Inspección visual completada ({width}x{height}px, Dispositivo: {device.upper()}) para '{url}'.",
                 f"{save_path_msg}",
+            ]
+            if interactive_path_msg:
+                telemetry_lines.append(f"{interactive_path_msg}")
+
+            telemetry_lines.extend([
                 "",
-                "── TELEMETRÍA ESTRUCTURAL & AUDITORÍA UX/UI DEL SITIO ──",
-                f"• Servidor Dev: {dom['status']}",
+                "── 🗺️ TOPOLOGÍA & ARQUITECTURA DEL SISTEMA ──",
+                f"• Estado del Servidor: {dom['status']}",
                 f"• Título de la Aplicación: {dom['title'] or '(Sin título explícito)'}",
                 f"• Modo de Captura: {'Página Completa (Full-Page scrollable)' if full_page and not scroll_y_raw else f'Sección/Scroll y={scroll_y_raw}'}",
-            ]
-            if dom["headings"]:
-                telemetry_lines.append(f"• Jerarquía Tipográfica Detectada: {', '.join(dom['headings'][:6])}")
-            if dom["buttons"]:
-                telemetry_lines.append(f"• Acciones & Botones Detectados: {', '.join(dom['buttons'][:6])}")
+            ])
+            if topology_data.get("views"):
+                telemetry_lines.append(f"• Vistas / Módulos de Navegación: {', '.join(topology_data['views'])}")
+            if topology_data.get("sections"):
+                telemetry_lines.append(f"• Secciones Estructurales: {', '.join(topology_data['sections'])}")
+            telemetry_lines.append(
+                f"• Superficie de Datos: {topology_data.get('tables', 0)} tablas/grids | "
+                f"{topology_data.get('forms', 0)} formularios ({topology_data.get('inputs', 0)} inputs) | "
+                f"{topology_data.get('buttons', 0)} botones de acción"
+            )
             if dom["fonts"]:
                 telemetry_lines.append(f"• Fuentes Tipográficas: {', '.join(dom['fonts'])}")
-            telemetry_lines.append("")
-            telemetry_lines.append("INSTRUCCIONES DE ART DIRECTION PARA EL DISEÑADOR:")
-            telemetry_lines.append("1. Analiza la imagen adjunta para auditar proporciones, contrastes, alineaciones y tipografía.")
-            telemetry_lines.append("2. Si deseas auditar otra sección o hacer scroll vertical, llama 'hermes_ui_inspect' pasando 'scroll_y' (ej: 'middle', 'bottom' o 1200).")
-            telemetry_lines.append("3. Para auditar la experiencia móvil en teléfono, llama 'hermes_ui_inspect' con 'device': 'mobile'.")
 
-        b64_data = base64.b64encode(img_bytes).decode("ascii")
-        return {
-            "content": [
-                {
-                    "type": "text",
-                    "text": "\n".join(telemetry_lines)
-                },
-                {
-                    "type": "image",
-                    "data": b64_data,
-                    "mimeType": "image/png"
-                }
-            ]
-        }
+            # Code leaks & execution health
+            telemetry_lines.extend([
+                "",
+                "── 🛡️ AUDITORÍA DE INTEGRIDAD & ESCAPE DE CÓDIGOS (CODE LEAKS) ──"
+            ])
+            leaks = code_leaks_data.get("leaks", [])
+            broken_imgs = code_leaks_data.get("brokenImgs", [])
+            has_code_flaws = False
+
+            if leaks:
+                has_code_flaws = True
+                telemetry_lines.append("🚨 FUGA DE CÓDIGO DETECTADA EN PANTALLA:")
+                for lk in leaks:
+                    telemetry_lines.append(f"  • {lk}")
+            if broken_imgs:
+                has_code_flaws = True
+                telemetry_lines.append(f"⚠️ IMÁGENES ROTAS O FALLIDAS (404/naturalWidth=0): {', '.join(broken_imgs)}")
+            if console_warnings_errors or runtime_errors:
+                has_code_flaws = True
+                telemetry_lines.append("🚨 ERRORES EN CONSOLA JS / RUNTIME:")
+                for err in (runtime_errors + console_warnings_errors)[:5]:
+                    telemetry_lines.append(f"  • {err}")
+            if not has_code_flaws:
+                telemetry_lines.append("✓ Integridad Impecable: 0 variables sin compilar ({{...}}/${...}), 0 valores JS no resueltos (undefined/null/NaN), 0 errores de consola.")
+
+            # Interactive state audit (Modals / Drawers / Overlays)
+            telemetry_lines.extend([
+                "",
+                "── 📐 AUDITORÍA DE ESTADOS INTERNOS & ERGONOMÍA (MODALES / DRAWERS) ──"
+            ])
+            if target_action_desc:
+                telemetry_lines.append(f"• {target_action_desc}")
+
+            if interactive_diag and interactive_diag.get("found"):
+                diag_tag = interactive_diag.get("tag", "modal").upper()
+                diag_title = interactive_diag.get("title") or "(Sin título)"
+                telemetry_lines.append(f"• Contenedor Emergente Detectado: <{diag_tag}> '{diag_title}' ({interactive_diag['w']}x{interactive_diag['h']}px)")
+
+                # Image / hero ratio check
+                img_ratio = interactive_diag.get("imgRatio", 0)
+                img_h = interactive_diag.get("imgHeight", 0)
+                has_scroll = interactive_diag.get("hasScroll", False)
+                has_close = interactive_diag.get("hasCloseBtn", False)
+                is_two_col = interactive_diag.get("isTwoColumn", False)
+
+                if img_ratio > 0.38:
+                    telemetry_lines.append(
+                        f"🚨 DEFECTO DE MAQUETACIÓN EN MODAL/DRAWER: El banner o imagen ocupa el {int(img_ratio * 100)}% "
+                        f"de la altura visible del modal ({img_h}px de {interactive_diag['h']}px), desplazando los datos "
+                        "y forzando un scroll interno innecesario. CORRECCIÓN OBLIGATORIA: En pantallas desktop, usa arquitectura "
+                        "de 2 columnas (grid-cols-2: multimedia a la izquierda, especificaciones/formulario a la derecha) "
+                        "o limita la imagen a max-height: 240px con object-fit: cover."
+                    )
+                elif is_two_col:
+                    telemetry_lines.append("✓ Arquitectura de 2 Columnas Split detectada en modal: Excelente distribución horizontal.")
+                else:
+                    telemetry_lines.append(f"✓ Proporción de cabecera balanceada ({int(img_ratio * 100)}% de altura).")
+
+                if has_scroll and interactive_diag['w'] > 720:
+                    telemetry_lines.append(
+                        f"⚠️ ADVERTENCIA DE SCROLL: El modal tiene scroll vertical interno forzado teniendo {interactive_diag['w']}px "
+                        "de ancho horizontal libre. Distribuye el contenido horizontalmente para evitar scrolling innecesario."
+                    )
+
+                if not has_close:
+                    telemetry_lines.append("⚠️ ACCESIBILIDAD: No se detectó un botón accesible para cerrar/descartar la ventana emergente.")
+                else:
+                    telemetry_lines.append("✓ Botón de cierre y descarte accesible detectado.")
+            else:
+                telemetry_lines.append("• No se detectó ningún modal o ventana emergente activa tras la interacción (vista estática o sin disparadores visibles).")
+
+            telemetry_lines.extend([
+                "",
+                "INSTRUCCIONES DE ART DIRECTION PARA EL AGENTE:",
+                "1. Analiza las capturas visuales adjuntas: 'Captura Principal' y 'Captura Estado Interno' (si hubo modal abierto).",
+                "2. Si la herramienta reportó alertas de proporciones en modales, corrige el CSS a layout 2 columnas o limita la cabecera.",
+                "3. Para auditar otra sección o vista específica, puedes llamar 'hermes_ui_inspect' con 'click_target' o 'scroll_y'."
+            ])
+
+        content_blocks = [
+            {
+                "type": "text",
+                "text": "\n".join(telemetry_lines)
+            },
+            {
+                "type": "image",
+                "data": base64.b64encode(img_bytes).decode("ascii"),
+                "mimeType": "image/png"
+            }
+        ]
+
+        if interactive_img_bytes:
+            content_blocks.append({
+                "type": "image",
+                "data": base64.b64encode(interactive_img_bytes).decode("ascii"),
+                "mimeType": "image/png"
+            })
+
+        return {"content": content_blocks}
     else:
         return {
             "content": [{"type": "text", "text": "Error: no se pudo generar la captura de pantalla de la interfaz."}],
@@ -4517,13 +4816,25 @@ TOOLS = [
     },
     {
         "name": "hermes_ui_inspect",
-        "description": "USO EXCLUSIVO: Inspección visual y del DOM de páginas web o servidores de desarrollo locales (React/Vite/Next en localhost) con Chrome Headless. Permite capturar la página completa ('full_page': true), hacer scroll ('scroll_y'), auditar vistas móviles ('device': 'mobile') y extraer la jerarquía DOM/CSS en tiempo real. NUNCA usar para aplicaciones de escritorio nativas de Windows ni para scraping masivo de URLs externas.",
+        "description": "USO EXCLUSIVO: Inspección visual y del DOM profunda de aplicaciones web, CRM, dashboards y sitios (React/Vite/Next/HTML estático) con Chrome Headless. Mapea la topología de la aplicación (navegación, tablas, formularios, secciones), audita fugas de código ('Code Leaks': variables sin compilar, undefined, NaN, HTML crudo, imágenes rotas), simula interacción para auditar estados internos (modales, drawers laterales, popups), y evalúa ergonomía de maquetación y proporciones UX en tiempo real.",
         "inputSchema": {
             "type": "object",
             "properties": {
                 "url": {
                     "type": "string",
                     "description": "URL local o remota a inspeccionar (ej: 'http://localhost:5173'). Si se omite, auto-detecta el servidor Vite local activo."
+                },
+                "audit_interactive": {
+                    "type": "boolean",
+                    "description": "Si es true (defecto), audita automáticamente estados internos e interactivos: detecta y activa tarjetas, filas de tablas o botones de acción, captura el modal o drawer resultante y audita sus proporciones y ergonomía UX."
+                },
+                "click_target": {
+                    "type": "string",
+                    "description": "Selector CSS específico opcional a activar (ej: '.card', '#btn-nuevo-lead', 'tr.lead-row', '[data-modal]'). Si se omite y audit_interactive es true, auto-selecciona el primer elemento interactivo."
+                },
+                "audit_code_leaks": {
+                    "type": "boolean",
+                    "description": "Si es true (defecto), escanea exhaustivamente el DOM buscando 'escape de códigos' (variables sin compilar como {{...}} o ${...}, fugas de undefined/null/NaN/[object Object], HTML crudo sin renderizar e imágenes rotas)."
                 },
                 "full_page": {
                     "type": "boolean",
