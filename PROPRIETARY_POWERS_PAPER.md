@@ -116,16 +116,49 @@ La interfaz centralizada para el control de la suite (`dashboard.html` / `dashbo
 
 ---
 
-## 10. Matriz Resumen de Superpoderes Propios
+## 10. Grafo de Conocimiento y Compresión Arquitectónica (`hermes_code_graph`)
+
+Motor de análisis topológico de código implementado en Python puro:
+
+* **Extracción AST Multilenguaje:** Parsea estructuras sintácticas en Python (`ast.parse`) y JavaScript/TypeScript (regex AST de alta fidelidad), catalogando clases, funciones, métodos e imports.
+* **Detección de "God Nodes":** Calcula el grado de acoplamiento de dependencias (in-degree / out-degree) para alertar al agente sobre archivos neurálgicos cuya modificación requiere precaución extrema.
+* **Compresión Topológica 70x:** En lugar de leer decenas de archivos con `file_read` saturando el contexto del LLM, genera un mapa de arquitectura completo en menos de 400 tokens.
+
+---
+
+## 11. Planificación Persistente Anti-Amnesia (`hermes_task_plan`)
+
+Módulo de persistencia agéntica en disco local:
+
+* **Arquitectura de 3 Archivos:** Mantiene `task_plan.md` (fases y pasos pendientes/completados), `findings.md` (restricciones arquitectónicas descubiertas) y `progress.md` (bitácora de hitos alcanzados).
+* **Resiliencia ante Desconexiones:** Si el navegador se cierra, la red falla o el chat se limpia, el agente lee el estado del plan en disco en 200 tokens y retoma la ejecución sin amnesia ni desvíos.
+
+---
+
+## 12. Automatización Nativa de Escritorio Windows (`hermes_computer_use` UIA)
+
+Evolución del control de escritorio hacia Windows UI Automation:
+
+* **Inspección de Jerarquía de Accesibilidad:** `action: "inspect_tree"` extrae el árbol de controles de ventanas nativas (.exe) asignando referencias estables (`@ref:0`, `@ref:1`).
+* **Interacción en Segundo Plano Sin Visión:** Permite clics e inputs directos (`uia_click`, `uia_set_value`) calculando coordenadas geométricas automáticamente sin necesidad de tomar capturas de pantalla ni saturar tokens de visión.
+
+---
+
+## 13. Matriz Resumen de Superpoderes Propios
 
 | Innovación / Superpoder | Archivo / Componente Principal | Rol en el Ecosistema |
 | :--- | :--- | :--- |
 | **Memoria Tripartita Cifrada** | `%LOCALAPPDATA%\hermes\memory\` | Identidad inmutable, lecciones y hechos persistentes. |
 | **Filtro Anti-PII en Vivo** | `hermes_mcp_server.py` | Enmascaramiento dinámico de rutas de usuario. |
 | **Auditoría Visual Headless** | `hermes_ui_inspect` | Ojos de la IA, captura 1440px y auto-reparación HTTP 500. |
-| **Tracker de Servidores Web** | `hermes_dev_server` | Monitoreo de procesos Vite/Node/Next en segundo plano. |
+| **Tracker y Lanzador Web** | `hermes_dev_server` | Inicio instantáneo HTTP y monitoreo de servidores en 2° plano. |
 | **Terminal Auto-Cura** | `_tool_terminal` (`hermes_mcp_server.py`) | Corrección de comillas en `cd`, PowerShell y rutas Windows. |
 | **Scaffolding Atómico por Lote**| `hermes_batch_scaffold` | Creación de andamiaje en 30ms con pre-flight JSON check. |
+| **Knowledge Graph AST 70x** | `hermes_code_graph` | Grafo de dependencias, God Nodes y compresión 70x de contexto. |
+| **Planificador Anti-Amnesia** | `hermes_task_plan` | Persistencia en disco de planes, findings y progreso. |
+| **Windows UIA Desktop** | `hermes_computer_use` | Árbol UIA con `@ref:N`, clics deterministas sin captura de pantalla. |
+| **Pre-Flight Guardian** | `hermes_preflight` | Validación sintáctica previa (Python, JS, JSON) antes de entregar. |
+| **Rollback Quirúrgico** | `hermes_checkpoint` | Puntos de restauración rápidos por archivo sin Git ni overhead. |
 | **Modo Segundo Plano Infinito** | `core/main.js` + Audio Keep-Alive | Ejecución autónoma sin dormirse al minimizar la ventana. |
 | **Skill Three.js Offline** | `skills/creative/threejs-worldclass-offline/` | Escenas 3D inmediatas sin bloqueo de Suspense ni CDN. |
 | **Mission Control Dashboard** | `dashboard.html` + `overlay.css` | Panel Atelier de control total, servidores y enjambre. |
