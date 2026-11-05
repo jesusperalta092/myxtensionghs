@@ -36,7 +36,7 @@ except Exception:
 # Optional OS Automation Imports
 try:
     import pyautogui
-    pyautogui.FAILSAFE = True
+    pyautogui.FAILSAFE = False
 except Exception:
     pyautogui = None
 
@@ -921,7 +921,17 @@ def _tool_prospect_scrape(arguments: Dict[str, Any]) -> Dict[str, Any]:
 
 def _tool_computer_use(arguments: Dict[str, Any]) -> Dict[str, Any]:
     global _UIA_REF_CACHE
-    action = arguments.get("action", "capture")
+    raw_action = (arguments.get("action") or "capture").lower().strip()
+    
+    # Normalización inteligente de acciones de clic
+    if raw_action in ("click", "click_coordinates", "click_coord", "click_at", "click_xy", "mouse_click", "left_click"):
+        action = "click"
+    elif raw_action in ("double_click", "doubleclick"):
+        action = "double_click"
+    elif raw_action in ("right_click", "rightclick", "context_menu"):
+        action = "right_click"
+    else:
+        action = raw_action
     
     if action in ("capture", "screenshot", "screen", "take_screenshot"):
         img_bytes = None
@@ -966,25 +976,46 @@ def _tool_computer_use(arguments: Dict[str, Any]) -> Dict[str, Any]:
             }
 
     elif action in ("click", "double_click", "right_click"):
-        coord = arguments.get("coordinate")
-        if not coord or len(coord) < 2:
-            return {"content": [{"type": "text", "text": "Error: 'coordinate' [x, y] es requerido para clics."}], "isError": True}
-        x, y = int(coord[0]), int(coord[1])
+        # Soporte de múltiples formatos: coordinate=[x, y], coordinates=[x, y], coords=[x, y], pos=[x, y], o x=..., y=...
+        coord = arguments.get("coordinate") or arguments.get("coordinates") or arguments.get("coords") or arguments.get("pos")
+        x, y = None, None
+        if coord and isinstance(coord, (list, tuple)) and len(coord) >= 2:
+            try:
+                x, y = int(coord[0]), int(coord[1])
+            except Exception:
+                pass
+        elif "x" in arguments and "y" in arguments:
+            try:
+                x, y = int(arguments["x"]), int(arguments["y"])
+            except Exception:
+                pass
+
+        if x is None or y is None:
+            return {"content": [{"type": "text", "text": "Error: 'coordinate' [x, y] o parámetros 'x' e 'y' son requeridos para clics."}], "isError": True}
 
         if pyautogui is None:
             return {"content": [{"type": "text", "text": "Error: pyautogui no está instalado."}], "isError": True}
 
-        if action == "click":
-            pyautogui.click(x, y)
-            msg = f"Clic realizado en [{x}, {y}]."
-        elif action == "double_click":
-            pyautogui.doubleClick(x, y)
-            msg = f"Doble clic realizado en [{x}, {y}]."
-        elif action == "right_click":
-            pyautogui.rightClick(x, y)
-            msg = f"Clic derecho realizado en [{x}, {y}]."
+        wait_ms = arguments.get("wait_ms") or arguments.get("delay_ms")
+        if wait_ms:
+            try:
+                time.sleep(float(wait_ms) / 1000.0)
+            except Exception:
+                pass
 
-        return {"content": [{"type": "text", "text": msg}]}
+        try:
+            if action == "click":
+                pyautogui.click(x, y)
+                msg = f"Clic realizado en [{x}, {y}]."
+            elif action == "double_click":
+                pyautogui.doubleClick(x, y)
+                msg = f"Doble clic realizado en [{x}, {y}]."
+            elif action == "right_click":
+                pyautogui.rightClick(x, y)
+                msg = f"Clic derecho realizado en [{x}, {y}]."
+            return {"content": [{"type": "text", "text": msg}]}
+        except Exception as e:
+            return {"content": [{"type": "text", "text": f"Error al ejecutar clic en [{x}, {y}]: {e}"}], "isError": True}
 
     elif action == "type":
         text = arguments.get("text", "")
@@ -1655,7 +1686,7 @@ def _tool_ui_inspect(arguments: Dict[str, Any]) -> Dict[str, Any]:
     else:
         audit_code_leaks = bool(audit_code_leaks_arg)
 
-    click_target = (arguments.get("click_target") or arguments.get("target_action") or arguments.get("target_selector") or "").strip()
+    click_target = (arguments.get("click_target") or arguments.get("target_action") or arguments.get("target_selector") or arguments.get("click_selector") or arguments.get("selector") or "").strip()
 
     # Handle wait time (support wait_ms or wait_seconds)
     wait_ms = arguments.get("wait_ms")
@@ -2890,17 +2921,30 @@ def _tool_dev_server(arguments: Dict[str, Any]) -> Dict[str, Any]:
     target_port = arguments.get("port", None)
     target_pid = arguments.get("pid", None)
 
-    # Inferencia inteligente de acción:
-    # Si se pasa "dir" o "port" sin acción explícita, o si action es "start"/"serve" -> action = "start"
-    if raw_action in ("start", "serve") or (not raw_action and raw_dir):
+    # Inferencia y normalización inteligente de acción:
+    if raw_action in ("start", "serve", "launch", "run", "up"):
+        action = "start"
+    elif raw_action in ("status", "info", "check", "inspect"):
+        action = "status"
+    elif raw_action in ("restart", "reboot", "reload"):
+        action = "restart"
+    elif raw_action in ("stop", "kill", "down", "close", "terminate"):
+        action = "stop"
+    elif raw_action in ("stop_all", "kill_all", "clean_all"):
+        action = "stop_all"
+    elif raw_action in ("clean_duplicates", "dedup", "prune"):
+        action = "clean_duplicates"
+    elif raw_action in ("list", "ls", "ps"):
+        action = "list"
+    elif not raw_action and raw_dir:
         action = "start"
     elif raw_action:
         action = raw_action
     else:
         action = "list"
 
-    # Invalidate cache if stopping or starting
-    if action in ("stop", "stop_all", "start", "serve"):
+    # Invalidate cache if modifying
+    if action in ("stop", "stop_all", "start", "serve", "restart", "clean_duplicates"):
         _DEV_SERVERS_CACHE = None
     elif action == "list" and _DEV_SERVERS_CACHE is not None and (time.time() - _DEV_SERVERS_CACHE_TIME) < 4.0:
         return _DEV_SERVERS_CACHE
@@ -3024,6 +3068,24 @@ def _tool_dev_server(arguments: Dict[str, Any]) -> Dict[str, Any]:
 
             return servers
 
+        def _is_url_responding(url: str, timeout: float = 0.8) -> bool:
+            try:
+                import urllib.request
+                req = urllib.request.Request(url, headers={"User-Agent": "GHS-DevServer-Check"})
+                with urllib.request.urlopen(req, timeout=timeout) as resp:
+                    return resp.status in (200, 301, 302, 304, 404)
+            except Exception:
+                return False
+
+        def _is_port_in_use(p: int) -> bool:
+            try:
+                import socket
+                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                    s.settimeout(0.4)
+                    return s.connect_ex(("127.0.0.1", p)) == 0
+            except Exception:
+                return False
+
         if action == "list":
             servers = _get_running_servers()
             res = {
@@ -3034,16 +3096,112 @@ def _tool_dev_server(arguments: Dict[str, Any]) -> Dict[str, Any]:
             _DEV_SERVERS_CACHE_TIME = time.time()
             return res
 
+        elif action == "status":
+            target_dir = resolve_target_path(raw_dir) if raw_dir else ""
+            servers = _get_running_servers()
+            if target_dir:
+                norm_target = os.path.normpath(target_dir).lower()
+                matched = [s for s in servers if s.get("cwd") and os.path.normpath(s["cwd"]).lower() == norm_target]
+                if matched:
+                    srv = matched[0]
+                    is_alive = _is_url_responding(srv.get("url", ""))
+                    return {
+                        "content": [{
+                            "type": "text",
+                            "text": json.dumps({
+                                "status": "running" if is_alive else "unresponsive",
+                                "project": srv.get("project"),
+                                "url": srv.get("url"),
+                                "port": srv.get("port"),
+                                "pid": srv.get("pid"),
+                                "directory": target_dir,
+                                "is_healthy": is_alive,
+                                "message": f"Servidor para '{srv.get('project')}' activo en {srv.get('url')} (PID {srv.get('pid')})."
+                            }, indent=2, ensure_ascii=False)
+                        }],
+                        "isError": False
+                    }
+                else:
+                    return {
+                        "content": [{
+                            "type": "text",
+                            "text": json.dumps({
+                                "status": "stopped",
+                                "directory": target_dir,
+                                "message": f"No hay ningún servidor de desarrollo activo para '{os.path.basename(target_dir)}'. Usa hermes_dev_server(action='start', dir=...) para iniciarlo."
+                            }, indent=2, ensure_ascii=False)
+                        }],
+                        "isError": False
+                    }
+            else:
+                return {
+                    "content": [{"type": "text", "text": json.dumps({"count": len(servers), "servers": servers}, indent=2, ensure_ascii=False)}],
+                    "isError": False
+                }
+
+        elif action == "clean_duplicates":
+            servers = _get_running_servers()
+            pruned = []
+            seen_dirs = {}
+            for s in servers:
+                cwd = s.get("cwd", "")
+                if not cwd:
+                    continue
+                norm_d = os.path.normpath(cwd).lower()
+                if norm_d not in seen_dirs:
+                    seen_dirs[norm_d] = s
+                else:
+                    dup_pid = s.get("pid")
+                    if dup_pid:
+                        try:
+                            subprocess.run(f"taskkill /F /T /PID {dup_pid}", shell=True, capture_output=True, creationflags=0x08000000)
+                            _unregister_dev_server(dup_pid)
+                            pruned.append(f"PID {dup_pid} ({s.get('project')}, Puerto {s.get('port')})")
+                        except Exception:
+                            pass
+            _DEV_SERVERS_CACHE = None
+            return {
+                "content": [{
+                    "type": "text",
+                    "text": f"Deduplicación completada: {len(pruned)} servidor(es) duplicado(s) eliminado(s): {', '.join(pruned) if pruned else 'No se detectaron servidores duplicados.'}"
+                }],
+                "isError": False
+            }
+
         elif action == "stop":
             pids_to_kill = set()
             if target_pid:
-                pids_to_kill.add(int(target_pid))
+                try:
+                    pids_to_kill.add(int(target_pid))
+                except Exception:
+                    pass
+
+            target_dir = resolve_target_path(raw_dir) if raw_dir else ""
+            norm_target = os.path.normpath(target_dir).lower() if target_dir else ""
+
             servers = _get_running_servers()
             for s in servers:
+                s_cwd = os.path.normpath(s.get("cwd", "")).lower() if s.get("cwd") else ""
+                s_proj = (s.get("project") or "").lower()
                 if target_port and s.get("port") == int(target_port):
                     pids_to_kill.add(s["pid"])
                 elif target_pid and s.get("pid") == int(target_pid):
                     pids_to_kill.add(s["pid"])
+                elif norm_target and (s_cwd == norm_target or (target_dir and os.path.basename(target_dir).lower() in s_proj)):
+                    pids_to_kill.add(s["pid"])
+
+            # Si se pasó target_dir pero no estaba en la lista de servers, buscar en psutil directamente
+            if not pids_to_kill and norm_target and psutil:
+                try:
+                    for p in psutil.process_iter(['pid', 'name', 'cmdline']):
+                        try:
+                            cmd_str = " ".join(p.info.get('cmdline') or []).lower()
+                            if norm_target in cmd_str and any(k in cmd_str for k in ["node", "vite", "http.server", "python"]):
+                                pids_to_kill.add(p.info['pid'])
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
 
             stopped = []
             for pid in pids_to_kill:
@@ -3053,6 +3211,7 @@ def _tool_dev_server(arguments: Dict[str, Any]) -> Dict[str, Any]:
                     stopped.append(f"PID {pid}")
                 except Exception as e:
                     stopped.append(f"PID {pid} (error: {e})")
+            _DEV_SERVERS_CACHE = None
             return {
                 "content": [{"type": "text", "text": f"Servidor detenido: {', '.join(stopped) if stopped else 'No se encontró ningún servidor activo con ese criterio.'}"}],
                 "isError": False
@@ -3071,12 +3230,13 @@ def _tool_dev_server(arguments: Dict[str, Any]) -> Dict[str, Any]:
                     except Exception:
                         pass
             _save_dev_server_registry({})
+            _DEV_SERVERS_CACHE = None
             return {
                 "content": [{"type": "text", "text": f"Todos los servidores locales han sido detenidos exitosamente ({len(stopped)} proceso(s)): {', '.join(stopped) if stopped else 'No había servidores web activos.'}"}],
                 "isError": False
             }
 
-        elif action in ("start", "serve"):
+        elif action in ("restart", "start", "serve"):
             target_dir = ""
             if raw_dir:
                 target_dir = resolve_target_path(raw_dir)
@@ -3089,62 +3249,215 @@ def _tool_dev_server(arguments: Dict[str, Any]) -> Dict[str, Any]:
             if not os.path.exists(target_dir):
                 os.makedirs(target_dir, exist_ok=True)
 
-            port = 8080
-            if target_port:
-                try:
-                    port = int(target_port)
-                except Exception:
-                    port = 8080
+            norm_target = os.path.normpath(target_dir).lower()
+            proj_name = os.path.basename(os.path.normpath(target_dir)) or "Proyecto Web"
 
-            import socket
-            def _is_port_in_use(p: int) -> bool:
-                try:
-                    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                        return s.connect_ex(("127.0.0.1", p)) == 0
-                except Exception:
-                    return False
+            # Si es RESTART, detener cualquier servidor previo de este directorio primero
+            if action == "restart":
+                servers = _get_running_servers()
+                for s in servers:
+                    s_cwd = os.path.normpath(s.get("cwd", "")).lower() if s.get("cwd") else ""
+                    if s_cwd == norm_target or (target_port and s.get("port") == int(target_port)):
+                        try:
+                            subprocess.run(f"taskkill /F /T /PID {s['pid']}", shell=True, capture_output=True, creationflags=0x08000000)
+                            _unregister_dev_server(s["pid"])
+                        except Exception:
+                            pass
+                time.sleep(0.5)
 
-            # Verificar si ya existe un servidor activo para esta carpeta exacta
+            # Verificar si ya existe un servidor activo y respondiendo para esta carpeta exacta
             existing = _get_running_servers()
             for s in existing:
                 s_cwd = s.get("cwd", "")
-                if s_cwd and os.path.normpath(s_cwd).lower() == os.path.normpath(target_dir).lower():
-                    s_port = s.get("port", port)
+                if s_cwd and os.path.normpath(s_cwd).lower() == norm_target:
+                    s_port = s.get("port", target_port or 5173)
                     s_url = s.get("url") or f"http://localhost:{s_port}"
-                    return {
-                        "content": [{
-                            "type": "text",
-                            "text": json.dumps({
-                                "success": True,
-                                "action": "start",
-                                "status": "already_running",
-                                "url": s_url,
-                                "port": s_port,
-                                "pid": s.get("pid"),
-                                "directory": target_dir,
-                                "message": f"✓ Servidor web ya activo en {s_url} sirviendo '{os.path.basename(target_dir)}'."
-                            }, indent=2, ensure_ascii=False)
-                        }],
-                        "isError": False
-                    }
+                    if _is_url_responding(s_url):
+                        return {
+                            "content": [{
+                                "type": "text",
+                                "text": json.dumps({
+                                    "success": True,
+                                    "action": action,
+                                    "status": "already_running",
+                                    "url": s_url,
+                                    "port": s_port,
+                                    "pid": s.get("pid"),
+                                    "directory": target_dir,
+                                    "message": f"✓ Servidor web ya activo y verificado respondiendo en {s_url} para '{proj_name}'."
+                                }, indent=2, ensure_ascii=False)
+                            }],
+                            "isError": False
+                        }
+                    else:
+                        # Proceso zombi o no respondiendo: limpiarlo antes de relanzar
+                        try:
+                            subprocess.run(f"taskkill /F /T /PID {s['pid']}", shell=True, capture_output=True, creationflags=0x08000000)
+                            _unregister_dev_server(s["pid"])
+                        except Exception:
+                            pass
 
-            # Si el puerto solicitado está ocupado por otro servicio, buscar el siguiente disponible
-            if _is_port_in_use(port):
-                for candidate in range(port + 1, port + 30):
-                    if not _is_port_in_use(candidate):
-                        port = candidate
+            # Detectar tipo de proyecto: Vite/Node/Next vs HTML estático
+            pkg_json_path = os.path.join(target_dir, "package.json")
+            is_node_project = os.path.isfile(pkg_json_path)
+
+            if is_node_project:
+                # Proyecto Node / React / Vite
+                pkg_data = {}
+                try:
+                    with open(pkg_json_path, "r", encoding="utf-8") as f:
+                        pkg_data = json.load(f)
+                except Exception:
+                    pass
+
+                # Matar procesos node huérfanos previos en este directorio exacto para evitar conflictos de puerto
+                if psutil:
+                    try:
+                        for p in psutil.process_iter(['pid', 'name', 'cmdline']):
+                            try:
+                                cmd_str = " ".join(p.info.get('cmdline') or []).lower()
+                                if norm_target in cmd_str and any(k in cmd_str for k in ["node", "vite"]):
+                                    subprocess.run(f"taskkill /F /T /PID {p.info['pid']}", shell=True, capture_output=True, creationflags=0x08000000)
+                            except Exception:
+                                pass
+                    except Exception:
+                        pass
+
+                # Seleccionar puerto base
+                port = 5173
+                if target_port:
+                    try:
+                        port = int(target_port)
+                    except Exception:
+                        port = 5173
+
+                if _is_port_in_use(port):
+                    for candidate in range(port + 1, port + 30):
+                        if not _is_port_in_use(candidate):
+                            port = candidate
+                            break
+
+                # Determinar comando de ejecución
+                scripts = pkg_data.get("scripts", {})
+                is_vite = "vite" in str(pkg_data.get("devDependencies", {})) or "vite" in str(pkg_data.get("dependencies", {}))
+
+                if is_vite or "dev" in scripts:
+                    cmd = f"npm.cmd run dev -- --host --port {port}"
+                elif "start" in scripts:
+                    cmd = "npm.cmd start"
+                else:
+                    cmd = f"npx.cmd vite --host --port {port}"
+
+                creation_flags = 0x08000000 | 0x00000200  # CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP
+                dev_log_path = os.path.join(target_dir, ".ghs_dev_server.log")
+                dev_log_file = open(dev_log_path, "w", encoding="utf-8", errors="replace")
+
+                proc = subprocess.Popen(
+                    cmd,
+                    shell=True,
+                    cwd=target_dir,
+                    stdin=subprocess.DEVNULL,
+                    stdout=dev_log_file,
+                    stderr=subprocess.STDOUT,
+                    creationflags=creation_flags,
+                    close_fds=True
+                )
+
+                # Esperar hasta 4.0 segundos para que Vite compile y enlace el puerto
+                actual_port = port
+                actual_url = f"http://localhost:{port}"
+                for _ in range(16):
+                    time.sleep(0.25)
+                    if _is_url_responding(f"http://localhost:{port}"):
+                        actual_port = port
+                        actual_url = f"http://localhost:{port}"
                         break
 
-            # Lanzar servidor HTTP nativo en segundo plano sin ventana emergente
-            cmd = [sys.executable, "-m", "http.server", str(port)]
-            cflags = 0x08000000  # CREATE_NO_WINDOW
-            try:
+                    # Revisar log de salida por si Vite imprimió una URL directa
+                    try:
+                        if os.path.exists(dev_log_path):
+                            with open(dev_log_path, "r", encoding="utf-8", errors="replace") as lf:
+                                log_txt = lf.read()
+                                m_url = re.search(r"https?://(localhost|127\.0\.0\.1|\[::1\]):([0-9]+)", log_txt)
+                                if m_url:
+                                    detected_p = int(m_url.group(2))
+                                    if _is_url_responding(f"http://localhost:{detected_p}"):
+                                        actual_port = detected_p
+                                        actual_url = f"http://localhost:{detected_p}"
+                                        break
+                    except Exception:
+                        pass
+
+                    # Si Vite eligió otro puerto por colisión, detectarlo via netstat
+                    try:
+                        if psutil and psutil.pid_exists(proc.pid):
+                            parent_p = psutil.Process(proc.pid)
+                            child_pids = [c.pid for c in parent_p.children(recursive=True)]
+                            res_ns = subprocess.run("netstat -ano", shell=True, capture_output=True, text=True, creationflags=0x08000000)
+                            found_p = None
+                            for line in res_ns.stdout.splitlines():
+                                if "LISTENING" in line:
+                                    for cpid in child_pids:
+                                        if str(cpid) in line:
+                                            m_p = re.search(r":(\d+)\s+.*LISTENING\s+(\d+)", line)
+                                            if m_p and int(m_p.group(2)) == cpid:
+                                                found_p = int(m_p.group(1))
+                                                break
+                                    if found_p:
+                                        break
+                            if found_p and _is_url_responding(f"http://localhost:{found_p}"):
+                                actual_port = found_p
+                                actual_url = f"http://localhost:{found_p}"
+                                break
+                    except Exception:
+                        pass
+
+                _register_dev_server(proc.pid, actual_port, actual_url, proj_name, target_dir, cmd)
+                _DEV_SERVERS_CACHE = None
+
+                return {
+                    "content": [{
+                        "type": "text",
+                        "text": json.dumps({
+                            "success": True,
+                            "action": action,
+                            "status": "started",
+                            "url": actual_url,
+                            "port": actual_port,
+                            "pid": proc.pid,
+                            "directory": target_dir,
+                            "type": "vite/node",
+                            "message": f"✓ Servidor de desarrollo Vite/Node iniciado exitosamente en {actual_url} para la carpeta '{proj_name}'."
+                        }, indent=2, ensure_ascii=False)
+                    }],
+                    "isError": False
+                }
+
+            else:
+                # Proyecto HTML estático puro (sin package.json)
+                port = 8080
+                if target_port:
+                    try:
+                        port = int(target_port)
+                    except Exception:
+                        port = 8080
+
+                if _is_port_in_use(port):
+                    for candidate in range(port + 1, port + 30):
+                        if not _is_port_in_use(candidate):
+                            port = candidate
+                            break
+
+                cmd = [sys.executable, "-m", "http.server", str(port)]
+                cflags = 0x08000000 | 0x00000200  # CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP
                 proc = subprocess.Popen(
                     cmd,
                     cwd=target_dir,
+                    stdin=subprocess.DEVNULL,
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
-                    creationflags=cflags
+                    creationflags=cflags,
+                    close_fds=True
                 )
                 time.sleep(0.4)
                 if proc.poll() is not None:
@@ -3153,7 +3466,6 @@ def _tool_dev_server(arguments: Dict[str, Any]) -> Dict[str, Any]:
                         "isError": True
                     }
 
-                proj_name = os.path.basename(os.path.normpath(target_dir)) or "Proyecto Web"
                 url = f"http://localhost:{port}"
                 _register_dev_server(proc.pid, port, url, proj_name, target_dir, " ".join(cmd))
                 _DEV_SERVERS_CACHE = None
@@ -3163,21 +3475,17 @@ def _tool_dev_server(arguments: Dict[str, Any]) -> Dict[str, Any]:
                         "type": "text",
                         "text": json.dumps({
                             "success": True,
-                            "action": "start",
+                            "action": action,
                             "status": "started",
                             "url": url,
                             "port": port,
                             "pid": proc.pid,
                             "directory": target_dir,
+                            "type": "static_http",
                             "message": f"✓ Servidor de desarrollo iniciado exitosamente en {url} para la carpeta '{proj_name}'."
                         }, indent=2, ensure_ascii=False)
                     }],
                     "isError": False
-                }
-            except Exception as e:
-                return {
-                    "content": [{"type": "text", "text": f"Error al levantar servidor web en '{target_dir}': {e}"}],
-                    "isError": True
                 }
 
         return {"content": [{"type": "text", "text": f"Acción desconocida '{action}'."}], "isError": True}
@@ -4656,8 +4964,8 @@ TOOLS = [
             "properties": {
                 "action": {
                     "type": "string",
-                    "enum": ["inspect_tree", "uia_click", "uia_set_value", "uia_list_windows", "capture", "click", "double_click", "right_click", "type", "key", "scroll", "list_windows", "focus_app"],
-                    "description": "Acción a realizar: 'inspect_tree' (extrae jerarquía UIA con @ref IDs), 'uia_click' (clic determinista por @ref o nombre en segundo plano), 'uia_set_value' (escribe texto en control por @ref), 'uia_list_windows' (lista ventanas), o acciones legacy de cursor/teclado ('capture', 'click', 'type', 'key', 'focus_app')."
+                    "enum": ["inspect_tree", "uia_click", "uia_set_value", "uia_list_windows", "capture", "click", "click_coordinates", "double_click", "right_click", "type", "key", "scroll", "list_windows", "focus_app"],
+                    "description": "Acción a realizar: 'inspect_tree' (extrae jerarquía UIA con @ref IDs), 'uia_click' (clic determinista por @ref o nombre en segundo plano), 'uia_set_value' (escribe texto en control por @ref), 'uia_list_windows' (lista ventanas), o acciones de cursor/teclado ('capture', 'click', 'click_coordinates', 'type', 'key', 'focus_app')."
                 },
                 "ref_id": {
                     "type": "string",
@@ -4686,7 +4994,19 @@ TOOLS = [
                 "coordinate": {
                     "type": "array",
                     "items": {"type": "integer"},
-                    "description": "[x, y] coordenadas en píxeles para clics legacy."
+                    "description": "[x, y] coordenadas en píxeles para clics."
+                },
+                "x": {
+                    "type": "integer",
+                    "description": "Coordenada X en píxeles (alternativa directa a 'coordinate')."
+                },
+                "y": {
+                    "type": "integer",
+                    "description": "Coordenada Y en píxeles (alternativa directa a 'coordinate')."
+                },
+                "wait_ms": {
+                    "type": "integer",
+                    "description": "Milisegundos de pausa previa antes de la acción."
                 },
                 "key": {
                     "type": "string",
@@ -4870,26 +5190,26 @@ TOOLS = [
     },
     {
         "name": "hermes_dev_server",
-        "description": "Gestor y lanzador de servidores locales de desarrollo web (Vite, Next, Node, React o servidor HTTP estático). Permite iniciar un servidor HTTP local para previsualizar proyectos pasando dir y port ('start'/'serve'), listar los servidores y puertos activos ('list'), o detener servidores ('stop'/'stop_all').",
+        "description": "Gestor y lanzador inteligente de servidores locales de desarrollo web (Vite, Next, React, Node o HTTP estático). Soporta 'start'/'serve' (inicia el dev server correspondiente o devuelve el activo sin duplicados), 'status'/'info' (inspecciona el estado de salud del servidor de un proyecto), 'restart' (reinicia limpiamente el servidor del proyecto), 'clean_duplicates' (elimina procesos dev zombis duplicados), 'stop' (detiene por dir, puerto o pid) y 'stop_all' (detiene todos).",
         "inputSchema": {
             "type": "object",
             "properties": {
                 "action": {
                     "type": "string",
-                    "enum": ["start", "serve", "list", "stop", "stop_all"],
-                    "description": "Acción a realizar: 'start' o 'serve' (inicia servidor HTTP local en segundo plano para el directorio indicado), 'list' (listar servidores y puertos activos), 'stop' (detener por puerto o pid), 'stop_all' (detener todos los servidores)."
+                    "enum": ["start", "serve", "status", "restart", "clean_duplicates", "list", "stop", "stop_all"],
+                    "description": "Acción a realizar: 'start'/'serve' (inicia dev server Vite/Node o estático si no existe), 'status' (verifica si el servidor del proyecto está respondiendo), 'restart' (reinicia el servidor), 'clean_duplicates' (elimina instancias duplicadas del mismo proyecto), 'list' (listar todos los servidores activos), 'stop' (detener por dir, puerto o pid), 'stop_all' (detener todos)."
                 },
                 "dir": {
                     "type": "string",
-                    "description": "Directorio del proyecto web a servir cuando action='start' (ej: 'C:\\Users\\USER\\Downloads\\Proyecto_Web'). Si no se especifica action pero se pasa dir, se iniciará el servidor automáticamente."
+                    "description": "Directorio del proyecto web (ej: 'C:\\Users\\USER\\Downloads\\Proyecto_Mansiones_LaMolina'). Compatible también como 'cwd' o 'project_dir'."
                 },
                 "port": {
                     "type": "integer",
-                    "description": "Puerto del servidor a iniciar o detener (defecto: 8080)."
+                    "description": "Puerto del servidor a iniciar o detener (defecto: 5173 para Vite, 8080 para estático)."
                 },
                 "pid": {
                     "type": "integer",
-                    "description": "PID del proceso a detener."
+                    "description": "PID del proceso específico a detener."
                 }
             }
         }

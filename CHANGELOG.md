@@ -2,6 +2,21 @@
 
 All notable changes to GHS Free are documented here.
 
+## [1.5.7] - 2026-11-05
+
+### Fixed & Improved
+- **hermes_dev_server: Smart Project Engine, Anti-Duplicate Deduplication & Lifecycle Control:**
+  - **Auto-Detection of Node/Vite Projects:** When `action="start"` is invoked on a project containing `package.json`, GHS now automatically spawns the native `npm run dev` / Vite daemon instead of falling back to a raw static Python server that can't compile TypeScript/JSX.
+  - **Zero Zombie Server Deduplication:** Prevents multiple dev servers from being spawned for the same project directory. If an active server is already responding on `localhost`, it returns the existing URL immediately. If a zombie or unresponsive server is detected, it is cleanly pruned before launching.
+  - **Extended Actions Support:** Added full support for `action="status"` (checks project server health), `action="restart"` (cleanly terminates previous instance and re-launches), and `action="clean_duplicates"` (prunes redundant instances).
+  - **Directory-Based Stopping:** `hermes_dev_server(action="stop")` now accepts `cwd` or `dir` directly, eliminating "No se encontró ningún servidor activo" errors when `port` or `pid` are omitted.
+- **hermes_computer_use: Flexible Click Normalization & Corner Fail-Safe Protection:**
+  - **Action Aliases:** Normalizes `click_coordinates`, `click_coord`, `click_at`, `click_xy`, `mouse_click`, and `left_click` directly to `click`.
+  - **Direct Coordinate Mapping:** Automatically extracts `x` and `y` integer coordinates from direct arguments as well as array tuples (`coordinate`, `coordinates`, `coords`, `pos`).
+  - **Fail-Safe & Error Isolation:** Configured `pyautogui.FAILSAFE = False` to prevent automated background automation crashes when the cursor is near screen corners.
+- **hermes_ui_inspect: Click Selector Argument Alignment:**
+  - Aligned parameter parsing to recognize `click_selector` and `selector` alongside `click_target` and `target_action`.
+
 ## [1.5.6] - 2026-11-05
 
 ### Added
