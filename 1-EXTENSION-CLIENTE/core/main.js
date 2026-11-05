@@ -2590,30 +2590,29 @@ NO te detengas a explicar lo que vas a hacer ni esperes confirmación del usuari
       // NOT declare the session ready - abort quietly so "Start" stays available.
       if (A.stop || startRes.kind === "stopped") { diag("start.aborted", { kind: startRes.kind }); return; }
 
-      // If the model calls list_commands as instructed, run it and wait for the "ready" reply.
-      const firstName = startRes.calls && startRes.calls[0] && startRes.calls[0].tool;
-      if (startRes.kind === "tool" && startRes.calls && startRes.calls.length === 1 &&
-          (firstName === "list_commands" || firstName === "list_tools")) {
-        decorate.toolBox(startRes.item, "Loading commands", "run", "", true);
-        const toolFeedback = await runTool(startRes.calls[0]);
-        // Roblox down short-circuits list_commands into a plain "offline" note
-        // (main.js, list_commands handler) instead of the real catalogue - detect
-        // that and show it as such, rather than the STALE cached tool count below
-        // (the bridge keeps advertising Roblox's catalogue even with no Studio
-        // attached, so A.toolList still has 25+ entries that were never actually
-        // usable this boot).
-        if (/Roblox Studio is currently OFFLINE/.test(toolFeedback)) {
+      // If the model calls a bootstrap command (hermes_memory, list_commands, etc.), run it and complete the handshake.
+      if (startRes.kind === "tool" && startRes.calls && startRes.calls.length >= 1) {
+        const firstCall = startRes.calls[0];
+        const firstName = firstCall && firstCall.tool;
+        if (firstName === "hermes_memory" || firstName === "context") {
+          decorate.toolBox(startRes.item, "Cargando memoria...", "run", "", true);
+        } else if (firstName === "list_commands" || firstName === "list_tools") {
+          decorate.toolBox(startRes.item, "Loading commands", "run", "", true);
+        } else {
+          decorate.toolBox(startRes.item, firstName || "Herramienta", "run", "", true);
+        }
+        const toolFeedback = await runTool(firstCall);
+        if (firstName === "hermes_memory" || firstName === "context") {
+          decorate.toolBox(startRes.item, "Memoria Hermes", "done", "Memoria sincronizada", true);
+        } else if (/Roblox Studio is currently OFFLINE/.test(toolFeedback)) {
           decorate.toolBox(startRes.item, "Loading commands", "err", "Roblox offline", true);
         } else if (/Roblox Studio mode is currently DISABLED/.test(toolFeedback)) {
           decorate.toolBox(startRes.item, "Hermes Agent", "done", "Hermes Ready", true);
-        } else {
-          // Count what the model ACTUALLY received: list_commands is scoped to the
-          // primary Roblox server (main.js ~629), so showing A.toolList.length (every
-          // connected server merged - Roblox + Blender + addons) overstated the boot
-          // count and made it look like all servers were loaded at once. Count the
-          // Roblox-scoped tools instead, matching the real result.
+        } else if (firstName === "list_commands" || firstName === "list_tools") {
           const robloxCount = A.toolList.filter((t) => (t.server || "roblox") === "roblox").length;
           decorate.toolBox(startRes.item, "Loading commands", "done", `${robloxCount} commands`, true);
+        } else {
+          decorate.toolBox(startRes.item, firstName || "Herramienta", "done", "Completado", true);
         }
         const base2 = await submitAndGetBase(toolFeedback);
         if (base2 === undefined || !alive()) return;
