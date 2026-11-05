@@ -923,7 +923,7 @@ def _tool_computer_use(arguments: Dict[str, Any]) -> Dict[str, Any]:
     global _UIA_REF_CACHE
     action = arguments.get("action", "capture")
     
-    if action == "capture":
+    if action in ("capture", "screenshot", "screen", "take_screenshot"):
         img_bytes = None
         width, height = 1920, 1080
         
@@ -2288,13 +2288,18 @@ def _tool_terminal(arguments: Dict[str, Any]) -> Dict[str, Any]:
         cmd_stripped = command.strip()
         lowered = cmd_stripped.lower()
 
-        # Protect GHS Bridge from indiscriminate taskkill of python.exe
-        if re.search(r"\btaskkill\b.*(?:/im\s+python(?:\.exe)?|python(?:\.exe)?\s+/im)", lowered) or \
-           re.search(r"\bstop-process\b.*-name\s+python\b", lowered):
+        # Protect GHS Bridge from indiscriminate killing of python.exe
+        is_killing_python = (
+            re.search(r"\btaskkill\b.*(?:/im\s+python(?:\.exe)?|python(?:\.exe)?\s+/im)", lowered) or
+            re.search(r"\bstop-process\b.*(?:-name\s+python|-processname\s+python)\b", lowered) or
+            re.search(r"\bget-process\b.*python.*\|.*\bstop-process\b", lowered) or
+            re.search(r"\bpkill\b.*python\b", lowered)
+        )
+        if is_killing_python:
             return {
                 "content": [{
                     "type": "text",
-                    "text": "AVISO DE SEGURIDAD GHS: Ejecutar 'taskkill /IM python.exe' de forma indiscriminada detendría el proceso del Puente WebSocket GHS. Para detener un servidor o script específico de Python, usa 'hermes_dev_server' o termina el proceso por su PID específico (ej: 'taskkill /F /PID <pid>')."
+                    "text": "AVISO DE SEGURIDAD GHS: Ejecutar comandos globales que detienen todos los procesos de Python ('Stop-Process' o 'taskkill /IM python.exe') desconectaría el propio Puente WebSocket de GHS. Para detener un servidor web de desarrollo de forma limpia, usa 'hermes_dev_server(action=\"stop\")' o detén el proceso por su PID específico (ej: 'taskkill /F /PID <pid>')."
                 }],
                 "isError": True
             }
@@ -3053,8 +3058,10 @@ def _tool_file_patch(arguments: Dict[str, Any]) -> Dict[str, Any]:
                 arguments.get("file_path") or arguments.get("target_path") or 
                 arguments.get("file") or arguments.get("filename") or "")
     patch_text = arguments.get("patch", "")
-    search_text = arguments.get("search", "")
-    replace_text = arguments.get("replace", "")
+    search_text = (arguments.get("search") or arguments.get("old_string") or 
+                   arguments.get("old_text") or arguments.get("find") or "")
+    replace_text = (arguments.get("replace") or arguments.get("new_string") or 
+                    arguments.get("new_text") or "")
 
     if not raw_path and not patch_text:
         return {"content": [{"type": "text", "text": "Error: 'path' o 'patch' es requerido."}], "isError": True}
