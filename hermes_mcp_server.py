@@ -2580,12 +2580,23 @@ _DEV_SERVERS_CACHE_TIME: float = 0.0
 
 def _tool_dev_server(arguments: Dict[str, Any]) -> Dict[str, Any]:
     global _DEV_SERVERS_CACHE, _DEV_SERVERS_CACHE_TIME
-    action = arguments.get("action", "list")
+    raw_action = (arguments.get("action") or "").lower().strip()
+    raw_dir = (arguments.get("dir") or arguments.get("directory") or 
+               arguments.get("path") or arguments.get("cwd") or arguments.get("project_dir") or "")
     target_port = arguments.get("port", None)
     target_pid = arguments.get("pid", None)
 
-    # Invalidate cache if stopping
-    if action in ("stop", "stop_all"):
+    # Inferencia inteligente de acción:
+    # Si se pasa "dir" o "port" sin acción explícita, o si action es "start"/"serve" -> action = "start"
+    if raw_action in ("start", "serve") or (not raw_action and raw_dir):
+        action = "start"
+    elif raw_action:
+        action = raw_action
+    else:
+        action = "list"
+
+    # Invalidate cache if stopping or starting
+    if action in ("stop", "stop_all", "start", "serve"):
         _DEV_SERVERS_CACHE = None
     elif action == "list" and _DEV_SERVERS_CACHE is not None and (time.time() - _DEV_SERVERS_CACHE_TIME) < 4.0:
         return _DEV_SERVERS_CACHE
@@ -2760,6 +2771,110 @@ def _tool_dev_server(arguments: Dict[str, Any]) -> Dict[str, Any]:
                 "content": [{"type": "text", "text": f"Todos los servidores locales han sido detenidos exitosamente ({len(stopped)} proceso(s)): {', '.join(stopped) if stopped else 'No había servidores web activos.'}"}],
                 "isError": False
             }
+
+        elif action in ("start", "serve"):
+            target_dir = ""
+            if raw_dir:
+                target_dir = resolve_target_path(raw_dir)
+            else:
+                target_dir = os.path.join(os.environ.get("USERPROFILE", os.path.expanduser("~")), "Downloads")
+
+            if os.path.isfile(target_dir):
+                target_dir = os.path.dirname(target_dir)
+
+            if not os.path.exists(target_dir):
+                os.makedirs(target_dir, exist_ok=True)
+
+            port = 8080
+            if target_port:
+                try:
+                    port = int(target_port)
+                except Exception:
+                    port = 8080
+
+            import socket
+            def _is_port_in_use(p: int) -> bool:
+                try:
+                    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                        return s.connect_ex(("127.0.0.1", p)) == 0
+                except Exception:
+                    return False
+
+            # Verificar si ya existe un servidor activo para esta carpeta exacta
+            existing = _get_running_servers()
+            for s in existing:
+                s_cwd = s.get("cwd", "")
+                if s_cwd and os.path.normpath(s_cwd).lower() == os.path.normpath(target_dir).lower():
+                    s_port = s.get("port", port)
+                    s_url = s.get("url") or f"http://localhost:{s_port}"
+                    return {
+                        "content": [{
+                            "type": "text",
+                            "text": json.dumps({
+                                "success": True,
+                                "action": "start",
+                                "status": "already_running",
+                                "url": s_url,
+                                "port": s_port,
+                                "pid": s.get("pid"),
+                                "directory": target_dir,
+                                "message": f"✓ Servidor web ya activo en {s_url} sirviendo '{os.path.basename(target_dir)}'."
+                            }, indent=2, ensure_ascii=False)
+                        }],
+                        "isError": False
+                    }
+
+            # Si el puerto solicitado está ocupado por otro servicio, buscar el siguiente disponible
+            if _is_port_in_use(port):
+                for candidate in range(port + 1, port + 30):
+                    if not _is_port_in_use(candidate):
+                        port = candidate
+                        break
+
+            # Lanzar servidor HTTP nativo en segundo plano sin ventana emergente
+            cmd = [sys.executable, "-m", "http.server", str(port)]
+            cflags = 0x08000000  # CREATE_NO_WINDOW
+            try:
+                proc = subprocess.Popen(
+                    cmd,
+                    cwd=target_dir,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    creationflags=cflags
+                )
+                time.sleep(0.4)
+                if proc.poll() is not None:
+                    return {
+                        "content": [{"type": "text", "text": f"Error al iniciar servidor en puerto {port}: el proceso terminó con código {proc.poll()}."}],
+                        "isError": True
+                    }
+
+                proj_name = os.path.basename(os.path.normpath(target_dir)) or "Proyecto Web"
+                url = f"http://localhost:{port}"
+                _register_dev_server(proc.pid, port, url, proj_name, target_dir, " ".join(cmd))
+                _DEV_SERVERS_CACHE = None
+
+                return {
+                    "content": [{
+                        "type": "text",
+                        "text": json.dumps({
+                            "success": True,
+                            "action": "start",
+                            "status": "started",
+                            "url": url,
+                            "port": port,
+                            "pid": proc.pid,
+                            "directory": target_dir,
+                            "message": f"✓ Servidor de desarrollo iniciado exitosamente en {url} para la carpeta '{proj_name}'."
+                        }, indent=2, ensure_ascii=False)
+                    }],
+                    "isError": False
+                }
+            except Exception as e:
+                return {
+                    "content": [{"type": "text", "text": f"Error al levantar servidor web en '{target_dir}': {e}"}],
+                    "isError": True
+                }
 
         return {"content": [{"type": "text", "text": f"Acción desconocida '{action}'."}], "isError": True}
     except Exception as e:
@@ -4437,25 +4552,28 @@ TOOLS = [
     },
     {
         "name": "hermes_dev_server",
-        "description": "Gestor y monitor de servidores locales en vivo (Vite, Next, Node, React): lista los servidores y puertos actualmente activos en la PC, detiene servidores específicos por puerto/PID o detiene todos los servidores web de proyectos de forma limpia sin afectar a los servidores MCP del sistema.",
+        "description": "Gestor y lanzador de servidores locales de desarrollo web (Vite, Next, Node, React o servidor HTTP estático). Permite iniciar un servidor HTTP local para previsualizar proyectos pasando dir y port ('start'/'serve'), listar los servidores y puertos activos ('list'), o detener servidores ('stop'/'stop_all').",
         "inputSchema": {
             "type": "object",
             "properties": {
                 "action": {
                     "type": "string",
-                    "enum": ["list", "stop", "stop_all"],
-                    "description": "Acción a realizar: 'list' (listar servidores y puertos activos), 'stop' (detener por puerto o pid), 'stop_all' (detener todos los servidores de proyectos)."
+                    "enum": ["start", "serve", "list", "stop", "stop_all"],
+                    "description": "Acción a realizar: 'start' o 'serve' (inicia servidor HTTP local en segundo plano para el directorio indicado), 'list' (listar servidores y puertos activos), 'stop' (detener por puerto o pid), 'stop_all' (detener todos los servidores)."
+                },
+                "dir": {
+                    "type": "string",
+                    "description": "Directorio del proyecto web a servir cuando action='start' (ej: 'C:\\Users\\USER\\Downloads\\Proyecto_Web'). Si no se especifica action pero se pasa dir, se iniciará el servidor automáticamente."
                 },
                 "port": {
                     "type": "integer",
-                    "description": "Puerto del servidor a detener (ej: 5173, 4173)."
+                    "description": "Puerto del servidor a iniciar o detener (defecto: 8080)."
                 },
                 "pid": {
                     "type": "integer",
                     "description": "PID del proceso a detener."
                 }
-            },
-            "required": ["action"]
+            }
         }
     },
     {
