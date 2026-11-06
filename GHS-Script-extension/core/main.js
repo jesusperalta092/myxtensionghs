@@ -2026,136 +2026,106 @@ NO te detengas a explicar lo que vas a hacer ni esperes confirmación del usuari
           parseErrorCount = 0;
           A.textNudges = 0;
           const calls = res.calls;
-          if (calls.length > 1) {
-            base = await submitAndGetBase(ZS.FEEDBACK.multiTool(calls.map((c) => c.tool || "?")));
-            continue;
-          }
-          const call = calls[0];
-          // A tool ALREADY seen to return an image this session gets the "screen"
-          // chip optimistically at run time (parity with the known screen_capture),
-          // even though its name alone wouldn't reveal it. First-ever call of an
-          // unknown image tool stays generic here and upgrades at result time below.
-          const learnedImg = A.imageTools.has(bareToolName(call.tool));
-          const category = learnedImg ? "screen" : ZS.toolCategory(call.tool);
-          diag("tool.runCat", { name: call.tool, learnedImg, category });
+          const feedbacks = [];
+          const allImages = [];
 
-          // Park BEFORE painting the chip / stamping the clock / marking the turn
-          // dispatched. runTool() gates on visibility too (it is the choke point
-          // that also covers the bootstrap), but parking only there would leave
-          // this block's side effects applied for the whole minimize:
-          //   - the chip spins "running" while nothing actually runs, and
-          //     elapsedOn(zsToolT0) counts the parked time, so a 20-min minimize
-          //     renders a bogus "1200.0s" on the call;
-          //   - rememberExecuted() would mark the turn dispatched before it ever
-          //     ran, so a reload/close while parked loses the command for good -
-          //     the auto-resume watchdog refuses to re-fire an "executed" turn.
-          // Parking first keeps all of that truthful: we only commit once we are
-          // foreground and about to really dispatch.
-          if (!A.backgroundMode && document.hidden && !A.stop) {
-            diag("tool.parkBeforeDispatch", { name: call.tool });
-            if (!(await waitVisible()) || A.stop) break;
-          }
-          // Loading chip with the real args (loop owns this item from here).
-          decorate.toolBox(res.item, call.tool, "run", argSummary(call), true, callBody(call), category);
-          A.toolSettle = null; // a fresh call: no settled outcome yet
-          A.toolRunning = true;
-          A.toolStart = Date.now();
-          A.toolName = call.tool;
-          A.toolItem = res.item;
-          A.toolArg = argSummary(call);
-          // Record this turn as dispatched OFF the DOM so the auto-resume
-          // watchdog never re-fires it after a scroll re-render wipes the node's
-          // zloop/zResume markers (see the `executed` map).
-          rememberExecuted(res.item);
-          diag("tool.start", { name: call.tool });
-          A.lastTurnReply = (res && res.reply) || "";
-          const feedback = await runTool(call);
-          A.toolRunning = false;
-          diag("tool.done", { name: call.tool, ok: !feedback.startsWith("ERROR"), out: feedback.slice(0, 50) });
-          if (A.stop) {
-            // User halted mid-tool: settle the spinning chip so it doesn't look
-            // stuck loading forever, and MARK the turn so the sweep classifier
-            // never repaints it ✓ done once generation ends (the real cause of a
-            // stopped call still going green a moment later).
-            if (res.item) { res.item.dataset.zStopped = "1"; rememberHalted(res.item); }
-            decorate.toolBox(res.item, call.tool, "err", "stopped", true, "", category);
-            break;
-          }
-          const isErr = feedbackIsError(feedback);
-          const outBody = stripOutputPrefix(feedback);
-          // Trace the chip's DERIVED phase vs summary. Blender (and any MCP whose
-          // output leads with a warning/diagnostic line) resolves ✓ done - the
-          // payload starts "Output of…", not "ERROR" - yet outSummary shows its
-          // FIRST line, which is the warning. Captures firstLine vs a later
-          // success line so we can see the mismatch without guessing.
-          {
-            const lns = outBody.split("\n").map((l) => l.trim()).filter(Boolean);
-            diag("tool.result", { name: call.tool, isErr, phase: isErr ? "err" : "done",
-              summary: outSummary(feedback), lineCount: lns.length,
-              firstLine: (lns[0] || "").slice(0, 90), lastLine: (lns[lns.length - 1] || "").slice(0, 90) });
-          }
-          // A tool (Roblox OR any custom MCP server) that actually RETURNED an
-          // image becomes a "screen" chip - even if its name never let us guess.
-          // Reactive, not predictive: A.pendingImages is set by runTool before it
-          // returns. Remember the name so its next call is optimistic (see above).
-          const hasImages = !!(A.pendingImages && A.pendingImages.length);
-          if (hasImages) rememberImageTool(call.tool);
-          const resultCat = hasImages ? "screen" : category;
-          decorate.toolBox(res.item, call.tool, isErr ? "err" : "done", outSummary(feedback),
-            true, outBody, resultCat);
-          // Snapshot the settled outcome. If the site swaps this turn's DOM node
-          // while we wait for the model's next turn (wiping the chip AND the
-          // zloop ownership dataset), the sweep re-owns the fresh node with this
-          // outcome instead of letting branch-3 classification re-spin a "run"
-          // chip on an already-executed call.
-          A.toolSettle = {
-            phase: isErr ? "err" : "done", detail: outSummary(feedback),
-            body: outBody, category: resultCat, count: P.assistantCount(),
-            // Node IDENTITY of the settled turn (virtualization-proof), when the
-            // provider exposes it. The count guard alone misfires on Qwen: the
-            // list virtualizes so assistantCount() doesn't grow for the model's
-            // NEXT turn, and back-to-back calls to the SAME tool defeat the name
-            // guard too - the sweep then re-owned the STREAMING next turn's chip
-            // with the previous done/err outcome (seen live: 5x chip.reown with
-            // gen:true, rp tiny).
-            id: P.lastAssistantId ? P.lastAssistantId() : undefined,
-          };
+          for (let i = 0; i < calls.length; i++) {
+            const call = calls[i];
+            if (A.stop) break;
 
-          // Circuit Breaker for repeated identical tool failures
-          const currentCallSig = call.tool + ":" + JSON.stringify(call.arguments || {});
-          if (isErr) {
-            if (lastFailedCallSig === currentCallSig) {
-              repeatFailCount++;
-            } else {
-              lastFailedCallSig = currentCallSig;
-              repeatFailCount = 1;
+            const learnedImg = A.imageTools.has(bareToolName(call.tool));
+            const category = learnedImg ? "screen" : ZS.toolCategory(call.tool);
+            diag("tool.runCat", { name: call.tool, learnedImg, category, index: i, total: calls.length });
+
+            if (!A.backgroundMode && document.hidden && !A.stop) {
+              diag("tool.parkBeforeDispatch", { name: call.tool, index: i });
+              if (!(await waitVisible()) || A.stop) break;
             }
-          } else {
-            lastFailedCallSig = null;
-            repeatFailCount = 0;
+
+            const prefix = calls.length > 1 ? `[${i + 1}/${calls.length}] ` : "";
+            decorate.toolBox(res.item, call.tool, "run", prefix + argSummary(call), true, callBody(call), category);
+            A.toolSettle = null;
+            A.toolRunning = true;
+            A.toolStart = Date.now();
+            A.toolName = call.tool;
+            A.toolItem = res.item;
+            A.toolArg = argSummary(call);
+
+            if (i === 0) rememberExecuted(res.item);
+            diag("tool.start", { name: call.tool, index: i });
+            A.lastTurnReply = (res && res.reply) || "";
+
+            const feedback = await runTool(call);
+            A.toolRunning = false;
+            feedbacks.push(feedback);
+
+            if (A.pendingImages && A.pendingImages.length) {
+              allImages.push(...A.pendingImages);
+              rememberImageTool(call.tool);
+              A.pendingImages = null;
+            }
+
+            diag("tool.done", { name: call.tool, ok: !feedback.startsWith("ERROR"), out: feedback.slice(0, 50) });
+
+            if (A.stop) {
+              if (res.item) { res.item.dataset.zStopped = "1"; rememberHalted(res.item); }
+              decorate.toolBox(res.item, call.tool, "err", "stopped", true, "", category);
+              break;
+            }
+
+            const isErr = feedbackIsError(feedback);
+            const outBody = stripOutputPrefix(feedback);
+            {
+              const lns = outBody.split("\n").map((l) => l.trim()).filter(Boolean);
+              diag("tool.result", { name: call.tool, isErr, phase: isErr ? "err" : "done",
+                summary: outSummary(feedback), lineCount: lns.length,
+                firstLine: (lns[0] || "").slice(0, 90), lastLine: (lns[lns.length - 1] || "").slice(0, 90) });
+            }
+
+            const hasImages = allImages.length > 0;
+            const resultCat = hasImages ? "screen" : category;
+            decorate.toolBox(res.item, call.tool, isErr ? "err" : "done", prefix + outSummary(feedback),
+              true, outBody, resultCat);
+
+            A.toolSettle = {
+              phase: isErr ? "err" : "done", detail: prefix + outSummary(feedback),
+              body: outBody, category: resultCat, count: P.assistantCount(),
+              id: P.lastAssistantId ? P.lastAssistantId() : undefined,
+            };
+
+            // Circuit Breaker for repeated identical tool failures
+            const currentCallSig = call.tool + ":" + JSON.stringify(call.arguments || {});
+            if (isErr) {
+              if (lastFailedCallSig === currentCallSig) {
+                repeatFailCount++;
+              } else {
+                lastFailedCallSig = currentCallSig;
+                repeatFailCount = 1;
+              }
+            } else {
+              lastFailedCallSig = null;
+              repeatFailCount = 0;
+            }
+
+            if (repeatFailCount >= 3) {
+              diag("circuit_breaker.halt", { tool: call.tool, failCount: repeatFailCount });
+              ui.banner("warn", "Circuit Breaker: Bucle detenido",
+                `El comando '${call.tool}' ha fallado ${repeatFailCount} veces seguidas con el mismo error. Se detuvo la repetición automática para proteger tu sesión.`);
+              break;
+            }
           }
 
-          if (repeatFailCount >= 3) {
-            diag("circuit_breaker.halt", { tool: call.tool, failCount: repeatFailCount });
-            ui.banner("warn", "Circuit Breaker: Bucle detenido",
-              `El comando '${call.tool}' ha fallado ${repeatFailCount} veces seguidas con el mismo error. Se detuvo la repetición automática para proteger tu sesión.`);
-            break;
-          }
+          if (A.stop) break;
 
-          // Re-inject the command list every REMIND_TOOLS_EVERY successful calls.
-          // Appended UNDER the tool result and clearly marked as a reminder, so a
-          // model that has drifted from the exact command names gets re-anchored
-          // without it looking like a new result to act on. Errors don't count
-          // (they already restate what's wrong) and list_commands is redundant.
-          let toSend = feedback;
+          let toSend = feedbacks.join("\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n");
           if (repeatFailCount >= 2) {
             toSend += `\n\n[🛑 ALERTA DE CIRCUIT BREAKER]: Este comando ha fallado ${repeatFailCount} veces consecutivas. QUEDA ESTRICTAMENTE PROHIBIDO volver a ejecutar exactamente el mismo comando. Lee el mensaje de error o STDERR arriba, modifica los argumentos, cambia de sintaxis o divide la tarea en pasos más pequeños antes de continuar.`;
           }
-          if (!isErr && call.tool !== "list_commands" && A.toolList.length) {
-            A.toolCallsSinceReminder++;
+
+          if (repeatFailCount === 0 && A.toolList.length) {
+            A.toolCallsSinceReminder += calls.length;
             if (A.toolCallsSinceReminder >= REMIND_TOOLS_EVERY) {
               A.toolCallsSinceReminder = 0;
-              // Only inject Roblox reminder if active project is genuine Roblox Studio, NOT Web/Hermes
               const isWebProject = Boolean(
                 (typeof projectState !== "undefined" && (projectState.masterBlueprint || projectState.devServerUrl)) ||
                 (A.toolList && A.toolList.some((t) => t.name && (t.name.startsWith("hermes_") || t.name === "web_search")))
@@ -2169,14 +2139,10 @@ NO te detengas a explicar lo que vas a hacer ni esperes confirmación del usuari
               }
             }
           }
-          // This result becomes a turn, so it counts toward the re-statement
-          // budget - context volume is what makes the site summarise, and the
-          // volume is overwhelmingly tool results, not how often the user types.
+
           bumpSys("results");
-          // Ride the system-prompt re-statement out on this result if one is due
-          // and it fits (see withSysResend - the result itself is never trimmed).
           toSend = withSysResend(toSend);
-          const images = A.pendingImages;
+          const images = allImages.length ? allImages : null;
           A.pendingImages = null;
           diag("images.consumed", { count: images ? images.length : 0 });
           base = await submitAndGetBase(toSend, images);
@@ -2633,6 +2599,18 @@ NO te detengas a explicar lo que vas a hacer ni esperes confirmación del usuari
         const readyRes = await waitForResponse(base2); // wait for "I'm ready" reply
         if (!alive()) return;
         if (A.stop || readyRes.kind === "stopped") { diag("start.aborted", { kind: readyRes.kind }); return; }
+      } else if (A.hermesMode !== false) {
+        // Fallback: Si el modelo no emitió hermes_memory en el saludo, cargamos el contexto de memoria automáticamente
+        try {
+          const memCall = { tool: "hermes_memory", arguments: { action: "context" } };
+          const toolFeedback = await runTool(memCall);
+          const base2 = await submitAndGetBase(toolFeedback);
+          if (base2 !== undefined && alive()) {
+            await waitForResponse(base2);
+          }
+        } catch (e) {
+          diag("start.hermes_memory_fallback_error", { err: String(e) });
+        }
       }
       A.started = true;
       rememberSession(P.conversationKey()); // survives virtualization AND reloads

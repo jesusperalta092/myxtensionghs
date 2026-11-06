@@ -248,14 +248,28 @@ const ZSParse = (() => {
     return null;
   }
 
-  function extractToolAnywhere(text) {
+  function extractAllToolsAnywhere(text) {
+    if (!text || typeof text !== "string") return [];
+    text = text.replace(/<ds_safety>[\s\S]*?<\/ds_safety>\s*(?:Safe)?/gi, "")
+               .replace(/(?:\[(?:用户未成年|内容合规性|风险等级)\][^\n]*\n?)+/gi, "");
+
+    const calls = [];
+    const ranges = [];
+
     for (const key of ['"command"', '"tool"', '"action"', '"name"', '"tool_name"', '"toolName"']) {
       let pos = 0;
-      while (true) {
+      while (pos < text.length) {
         const s = text.indexOf(key, pos);
         if (s === -1) break;
+        if (ranges.some((r) => s >= r.start && s <= r.end)) {
+          pos = s + key.length;
+          continue;
+        }
         const start = text.lastIndexOf("{", s);
-        if (start === -1) { pos = s + 1; continue; }
+        if (start === -1 || ranges.some((r) => start >= r.start && start <= r.end)) {
+          pos = s + key.length;
+          continue;
+        }
         const end = matchBrace(text, start); // string-aware brace matching
 
         const endCandidates = [];
@@ -266,6 +280,7 @@ const ZSParse = (() => {
         }
 
         let foundCall = null;
+        let matchedEnd = -1;
         for (const candidateEnd of endCandidates) {
           try {
             const call = normalizeCall(parseLoose(text.slice(start, candidateEnd + 1)));
@@ -277,19 +292,36 @@ const ZSParse = (() => {
                 }
               }
               foundCall = call;
+              matchedEnd = candidateEnd;
               break;
             }
           } catch {}
         }
 
-        if (foundCall) return foundCall;
-        pos = s + 1;
+        if (foundCall) {
+          calls.push(foundCall);
+          ranges.push({ start, end: matchedEnd });
+          pos = matchedEnd + 1;
+        } else {
+          pos = s + key.length;
+        }
       }
     }
-    return extractMalformedCommandFallback(text);
+
+    if (calls.length > 0) return calls;
+    const fallback = extractMalformedCommandFallback(text);
+    return fallback ? [fallback] : [];
+  }
+
+  function extractToolAnywhere(text) {
+    const list = extractAllToolsAnywhere(text);
+    return list.length ? list[0] : null;
   }
 
   function parseToolCalls(r) {
+    if (!r) return [];
+    r = r.replace(/<ds_safety>[\s\S]*?<\/ds_safety>\s*(?:Safe)?/gi, "")
+         .replace(/(?:\[(?:用户未成年|内容合规性|风险等级)\][^\n]*\n?)+/gi, "");
     // Lowercase for case-insensitive end-marker search. Models write
     // ###end_mcp_tool### (underscore) or ###end-mcp_tool### (dash).
     const rLow = r.toLowerCase();
@@ -327,11 +359,11 @@ const ZSParse = (() => {
     // Prefer a JSON command envelope when one is present: a model may wrap
     // execute_luau as {"command":"execute_luau","params":{"code":"###LUA###…"}},
     // and the bare-marker fallback below would slice the still-ESCAPED JSON
-    // source (literal \n, \") instead of the decoded code. extractToolAnywhere
+    // source (literal \n, \") instead of the decoded code. extractAllToolsAnywhere
     // JSON-decodes it; cleanLuaCall (applied at the end) then strips the markers.
     if (out.length === 0) {
-      const f = extractToolAnywhere(r);
-      if (f) out.push(f);
+      const allFound = extractAllToolsAnywhere(r);
+      for (const f of allFound) out.push(f);
     }
     // Bare ###LUA### … ###END_LUA### block with no JSON envelope at all.
     if (out.length === 0) {

@@ -103,15 +103,22 @@ const ZSProvider = (() => {
   }
   const isAssistantItem = (item) => !!item && !isUserItem(item);
 
+  const STRIP_DS_SAFETY = (t) =>
+    (t || "")
+      .replace(/<ds_safety>[\s\S]*?<\/ds_safety>\s*(?:Safe)?/gi, "")
+      .replace(/(?:\[(?:用户未成年|内容合规性|风险等级)\][^\n]*\n?)+/gi, "")
+      .replace(/<ds_safety>[\s\S]*/gi, "")
+      .trim();
+
   // Text of an item for signature detection. For assistant turns we use ONLY
   // the non-thinking markdown, so tool blocks the model merely drafts inside
   // its reasoning are never detected, shown, or executed.
   function itemText(item) {
     if (isAssistantItem(item)) {
       const mds = [...item.querySelectorAll(S.markdown)].filter((m) => !m.closest(S.thinking));
-      return mds.map((m) => m.textContent).join("\n");
+      return STRIP_DS_SAFETY(mds.map((m) => m.textContent).join("\n"));
     }
-    return item.textContent || "";
+    return STRIP_DS_SAFETY(item.textContent || "");
   }
 
   // Text used by the core to CLASSIFY a turn for camouflage - excludes the
@@ -119,16 +126,16 @@ const ZSProvider = (() => {
   // so a recycled (virtualized) node wearing a stale chip is never mis-detected.
   function classifyText(item, excludeSel) {
     if (isAssistantItem(item)) {
-      return [...item.querySelectorAll(S.markdown)]
+      return STRIP_DS_SAFETY([...item.querySelectorAll(S.markdown)]
         .filter((m) => !m.closest(S.thinking) && !(excludeSel && m.closest(excludeSel)))
-        .map((m) => m.textContent).join("\n");
+        .map((m) => m.textContent).join("\n"));
     }
     let t = "";
     for (const n of item.childNodes) {
       if (excludeSel && n.nodeType === 1 && n.matches && n.matches(excludeSel)) continue;
       t += n.textContent || "";
     }
-    return t;
+    return STRIP_DS_SAFETY(t);
   }
 
   // ── DOM primitives ────────────────────────────────────────────────────────
@@ -609,7 +616,7 @@ const ZSProvider = (() => {
     const mds = [...item.querySelectorAll(S.markdown)].filter((m) => !m.closest(S.thinking));
     return {
       present: true,
-      reply: mds.map((m) => m.textContent).join("\n").trim(),
+      reply: STRIP_DS_SAFETY(mds.map((m) => m.textContent).join("\n")),
       thinking: th ? th.textContent.trim() : "",
       item,
     };
@@ -913,6 +920,12 @@ const ZSProvider = (() => {
     let parent = null, ref = null;
     for (const container of containers) {
       const kids = [...container.children].filter((k) => k !== chip && !(chip && k.contains(chip)));
+      for (const kid of kids) {
+        const kText = kid.textContent || "";
+        if (/<ds_safety|\[用户未成年\]|\[内容合规性\]|ds_safety>/i.test(kText)) {
+          kid.classList.add("zs-tool-hide");
+        }
+      }
       let i = 0;
       while (i < kids.length) {
         const txt = (kids[i].textContent || "");

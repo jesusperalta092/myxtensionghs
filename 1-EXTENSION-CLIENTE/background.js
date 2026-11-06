@@ -1546,4 +1546,22 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
 chrome.runtime.onStartup.addListener(connect);
 chrome.runtime.onInstalled.addListener(connect);
 
+try {
+  if (chrome.alarms) {
+    chrome.alarms.create("ghs_keepalive", { periodInMinutes: 0.5 });
+    chrome.alarms.onAlarm.addListener((alarm) => {
+      if (alarm.name === "ghs_keepalive") {
+        if (!connected || !ws || ws.readyState !== WebSocket.OPEN) {
+          log("keepalive alarm: reconnecting ws");
+          connect();
+        } else {
+          send({ type: "ping" }).catch(() => { });
+        }
+      }
+    });
+  }
+} catch (e) {
+  log("alarms keepalive setup failed", e);
+}
+
 connect();

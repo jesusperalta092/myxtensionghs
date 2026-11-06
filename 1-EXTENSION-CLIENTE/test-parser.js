@@ -116,3 +116,11 @@ const parsedHermes = ZSParse.parseToolCalls(hermesNameJson);
 ok("name hermes tool parsed correctly", parsedHermes.length === 1 && parsedHermes[0].tool === "hermes_file_write" && parsedHermes[0].arguments.path === "engine_pro.py");
 ok("name toolNameFromText extracts tool", ZSParse.toolNameFromText(hermesNameJson) === "hermes_file_write");
 
+// Multi-tool sequential extraction
+const multiCalls = ZSParse.parseToolCalls('{"command":"hermes_skill_view","params":{"skill":"a"}}\n{"command":"hermes_skill_view","params":{"skill":"b"}}');
+ok("multi-tool bare json parsed", multiCalls.length === 2 && multiCalls[0].arguments.skill === "a" && multiCalls[1].arguments.skill === "b");
+
+// ds_safety Chinese moderation tag stripping
+const safetyTest = ZSParse.parseToolCalls('<ds_safety>[用户未成年]否\n[内容合规性]合规</ds_safety> Safe\n{"command":"hermes_memory","params":{"action":"context"}}');
+ok("ds_safety filtered out", safetyTest.length === 1 && safetyTest[0].tool === "hermes_memory");
+
