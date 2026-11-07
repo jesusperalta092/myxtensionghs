@@ -85,9 +85,12 @@ def verify_license_remote(server_url: str = CLOUD_VERIFY_URL, timeout: int = 8) 
         return True, "Modo Desarrollador Local Activo"
 
     hwid = get_hardware_id()
-    client_name = os.environ.get("USERNAME", "Usuario")
+    username = os.environ.get("USERNAME", "Usuario")
+    computer = os.environ.get("COMPUTERNAME", "")
+    client_name = f"{username} @ {computer}" if computer else username
     
-    verify_endpoint = f"{server_url.rstrip('/')}/api/v1/license/verify?hwid={hwid}&name={client_name}"
+    import urllib.parse
+    verify_endpoint = f"{server_url.rstrip('/')}/api/v1/license/verify?hwid={hwid}&name={urllib.parse.quote(client_name)}"
 
     try:
         import urllib.request

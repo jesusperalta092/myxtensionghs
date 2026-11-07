@@ -127,6 +127,9 @@ def check_client_license(hwid: str, license_key: str = "", client_name: str = ""
     user["last_seen"] = now_iso
     if ip:
         user["last_ip"] = ip
+    # Actualizar con nombre enriquecido si el actual es generico o no ha sido personalizado
+    if client_name and (user.get("name") in ("USER", f"PC-{hwid[:8]}", "Usuario") or ("@" in client_name and not user.get("custom_name"))):
+        user["name"] = client_name
     _save_db(db)
 
     if user.get("status") == "blocked":
@@ -149,6 +152,19 @@ def check_client_license(hwid: str, license_key: str = "", client_name: str = ""
         "expiry": token_expiry,
         "token": f"{token_expiry}:{proof_sig}"
     }
+
+
+def rename_user(hwid: str, new_name: str) -> Dict[str, Any]:
+    db = _load_db()
+    users = db.setdefault("users", {})
+    if hwid not in users:
+        return {"success": False, "error": "Usuario no encontrado"}
+    clean_name = new_name.strip()
+    users[hwid]["name"] = clean_name
+    users[hwid]["custom_name"] = True
+    _save_db(db)
+    _log_audit("RENAME", hwid, f"Nombre actualizado a: {clean_name}")
+    return {"success": True, "hwid": hwid, "new_name": clean_name}
 
 
 def toggle_user(hwid: str) -> Dict[str, Any]:
@@ -579,6 +595,23 @@ def render_admin_page(is_auth: bool = False, login_error: bool = False) -> str:
     }}
     .btn-del:hover {{ color: #ef4444; background: rgba(239, 68, 68, 0.1); border-color: rgba(239, 68, 68, 0.3); }}
 
+    .btn-rename {{
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 6px;
+      color: #94a3b8;
+      font-size: 11px;
+      padding: 2px 6px;
+      cursor: pointer;
+      margin-left: 6px;
+      transition: all 0.2s;
+    }}
+    .btn-rename:hover {{
+      background: rgba(168, 85, 247, 0.2);
+      border-color: var(--accent);
+      color: #fff;
+    }}
+
     /* MODAL */
     .modal-overlay {{
       display: none;
@@ -699,7 +732,10 @@ def render_admin_page(is_auth: bool = False, login_error: bool = False) -> str:
         return `
           <tr id="row-${{u.hwid}}">
             <td>
-              <div class="client-name">${{escapeHtml(u.name || 'Sin nombre')}}</div>
+              <div class="client-name">
+                ${{escapeHtml(u.name || 'Sin nombre')}}
+                <button class="btn-rename" onclick="renameClient('${{u.hwid}}', '${{escapeHtml(u.name || '')}}')" title="Editar apodo o nombre real">✏️</button>
+              </div>
               <div class="client-note">${{escapeHtml(u.notes || 'IP: ' + (u.last_ip || 'Desconocida'))}}</div>
             </td>
             <td>
@@ -725,6 +761,24 @@ def render_admin_page(is_auth: bool = False, login_error: bool = False) -> str:
           </tr>
         `;
       }}).join('');
+    }}
+
+    async function renameClient(hwid, currentName) {{
+      const newName = prompt('Editar nombre para este cliente:', currentName);
+      if (newName === null || !newName.trim()) return;
+      try {{
+        const res = await fetch('/api/admin/rename?hwid=' + encodeURIComponent(hwid) + '&name=' + encodeURIComponent(newName.trim()), {{
+          method: 'GET'
+        }});
+        const data = await res.json();
+        if (data.success) {{
+          const item = usersData.find(u => u.hwid === hwid);
+          if (item) item.name = data.new_name;
+          renderTable();
+        }}
+      }} catch (e) {{
+        alert('Error al renombrar: ' + e);
+      }}
     }}
 
     async function toggleStatus(hwid) {{
@@ -909,6 +963,12 @@ async def handle_licensing_http(path: str, headers: Dict[str, str], body_bytes: 
         if clean_path == "/api/admin/delete":
             hwid = req_data.get("hwid") or query_params.get("hwid", [""])[0]
             res = delete_user(hwid)
+            return (200, {"Content-Type": "application/json"}, json.dumps(res).encode("utf-8"))
+
+        if clean_path == "/api/admin/rename":
+            hwid = req_data.get("hwid") or query_params.get("hwid", [""])[0]
+            new_name = req_data.get("name") or query_params.get("name", [""])[0]
+            res = rename_user(hwid, new_name)
             return (200, {"Content-Type": "application/json"}, json.dumps(res).encode("utf-8"))
 
         if clean_path == "/api/admin/create":
