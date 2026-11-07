@@ -2607,11 +2607,12 @@ Por favor espera unos segundos mientras la IA razona y estructura el blueprint..
     // Puerto OK. Lanzar Cloudflare
     resultBox.innerHTML = '<div style="font-size:24px;margin-bottom:10px;">[WAIT]</div><div style="font-family:JetBrains Mono,monospace;font-size:12px;color:#8b8579;">Servidor en puerto ' + port + ' OK. Iniciando túnel Cloudflare...</div>';
     
-    const delCmd = 'cd /d "%USERPROFILE%\\Downloads\\GHS-Script-Free" && if exist cf_url.txt del /f /q cf_url.txt';
+    const delCmd = 'if exist "%USERPROFILE%\\Downloads\\GHS-Script-Free\\cf_url.txt" del /f /q "%USERPROFILE%\\Downloads\\GHS-Script-Free\\cf_url.txt" & if exist "%USERPROFILE%\\Downloads\\GHS-Proyecto-Final\\cf_url.txt" del /f /q "%USERPROFILE%\\Downloads\\GHS-Proyecto-Final\\cf_url.txt" & if exist cf_url.txt del /f /q cf_url.txt';
     ws.send(JSON.stringify({ type: "call_tool", id: "del_cf_txt", name: "hermes_terminal", arguments: { command: delCmd, is_daemon: false } }));
     
-    const cmd = 'cd /d "%USERPROFILE%\\Downloads\\GHS-Script-Free" && run_tunnel.bat ' + port;
+    const cmd = 'if exist "%USERPROFILE%\\Downloads\\GHS-Proyecto-Final\\run_tunnel.bat" (cd /d "%USERPROFILE%\\Downloads\\GHS-Proyecto-Final" && run_tunnel.bat ' + port + ') else (cd /d "%USERPROFILE%\\Downloads\\GHS-Script-Free" && run_tunnel.bat ' + port + ')';
     ws.send(JSON.stringify({ type: "call_tool", id: "run_tunnel_daemon", name: "hermes_terminal", arguments: { command: cmd, is_daemon: true } }));
+
     
     // Polling mejorado (hasta 25 intentos = 50 segundos con indicador visual de progreso)
     let attempts = 0;

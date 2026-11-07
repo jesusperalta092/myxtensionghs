@@ -2527,8 +2527,29 @@ def resolve_target_path(path: str) -> str:
 
     # 2.1 Interceptor universal para cf_url.txt (Túnel Cloudflare)
     if bname == "CF_URL.TXT":
+        candidates = [
+            os.path.normpath(os.path.dirname(os.path.abspath(__file__))),
+            os.path.expandvars(r"%USERPROFILE%\Downloads\GHS-Script-Free"),
+            os.path.expandvars(r"%USERPROFILE%\Downloads\GHS-Proyecto-Final"),
+        ]
+        if GLOBAL_ACTIVE_WORKSPACE:
+            candidates.append(GLOBAL_ACTIVE_WORKSPACE)
+        
+        existing = []
+        for cdir in candidates:
+            cand_p = os.path.join(cdir, "cf_url.txt")
+            if os.path.isfile(cand_p):
+                try:
+                    existing.append((os.path.getmtime(cand_p), cand_p))
+                except Exception:
+                    pass
+        if existing:
+            existing.sort(reverse=True)
+            return existing[0][1]
+
         ghs_dir = os.path.normpath(os.path.dirname(os.path.abspath(__file__)))
         return os.path.join(ghs_dir, "cf_url.txt")
+
 
 
     # 3. Limpieza de rutas de Windows cuando corremos en Linux / Render
