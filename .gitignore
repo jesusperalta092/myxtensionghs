@@ -23,6 +23,8 @@ generate_*.py
 draw_*.py
 final_cleanup.py
 hide_swarm_buttons.py
+licenses_db.json*
+.ghs_hwid
 
 # System files
 .DS_Store

@@ -89,7 +89,7 @@ HOST = os.environ.get("ZS_BRIDGE_HOST", "0.0.0.0")
 # Keep in sync with ghs-extension/manifest.json "version" - printed at
 # startup so a user's terminal output alone tells us which build they're on.
 BRIDGE_VERSION = "1.5.5"
-PORT = int(os.environ.get("ZS_BRIDGE_PORT", "17613"))
+PORT = int(os.environ.get("PORT", os.environ.get("ZS_BRIDGE_PORT", "17613")))
 HERE = os.path.dirname(os.path.abspath(__file__))
 CONFIG_PATH = os.path.join(HERE, "config.json")
 os.environ["GHS_BRIDGE_PID"] = str(os.getpid())
@@ -3017,10 +3017,45 @@ async def main():
     if await asyncio.to_thread(_reclaim_bridge_port):
         await asyncio.sleep(0.6)  # let Windows release the socket before we bind
 
+    async def universal_process_request(*args, **kwargs):
+        try:
+            import licensing_manager as lm
+            import http
+            from websockets.http11 import Response
+            from websockets.datastructures import Headers
+
+            if len(args) >= 2:
+                first, second = args[0], args[1]
+                if hasattr(second, "path"):
+                    conn, req = first, second
+                    path = getattr(req, "path", "")
+                    headers = dict(getattr(req, "headers", {}))
+                    client_ip = getattr(conn, "remote_address", ("?",))[0] if hasattr(conn, "remote_address") else ""
+                    res = await lm.handle_licensing_http(path, headers, client_ip=client_ip)
+                    if res is not None:
+                        status_code, header_dict, body_bytes = res
+                        hdrs = Headers()
+                        for k, v in header_dict.items():
+                            hdrs[k] = v
+                        reason = http.HTTPStatus(status_code).phrase
+                        return Response(status_code, reason, hdrs, body_bytes)
+                    return None
+                else:
+                    path = str(first)
+                    headers = dict(second)
+                    res = await lm.handle_licensing_http(path, headers)
+                    if res is not None:
+                        status_code, header_dict, body_bytes = res
+                        return (status_code, list(header_dict.items()), body_bytes)
+                    return None
+        except Exception:
+            pass
+        return None
+
     try:
         server_ctx = await websockets.serve(
             handler, HOST, PORT, ping_interval=20, ping_timeout=20,
-            max_size=16 * 1024 * 1024)
+            max_size=16 * 1024 * 1024, process_request=universal_process_request)
     except OSError as e:
         # errno 10048 (Win) / EADDRINUSE: something we could NOT auto-kill still
         # owns the port - another app, or a python whose cmdline we couldn't read.
@@ -3038,6 +3073,20 @@ async def main():
 
     async with server_ctx:
         log(f"listening on ws://{HOST}:{PORT}  - load the extension and open a supported AI chat", "cy")
+        
+        # Sentinel de seguridad y Hardware ID
+        try:
+            import licensing_client as lc
+            hwid = lc.get_hardware_id()
+            log(f"hardware id [{hwid}]  - centinela de seguridad activo", "gr")
+            def _on_revoke(reason):
+                log(f"[SEGURIDAD] {reason}", "rd")
+                log("Cerrando puente por orden del administrador central...", "rd")
+                os._exit(0)
+            lc.start_license_sentinel(_on_revoke, interval=300)
+        except Exception as e:
+            log(f"centinela de seguridad: {e}", "yl")
+
         asyncio.create_task(_supervised("server_watch", server_watch))
         asyncio.create_task(_boot_and_diagnose())
         asyncio.create_task(_early_studio_guidance())
