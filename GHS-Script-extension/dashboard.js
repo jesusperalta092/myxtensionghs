@@ -2182,7 +2182,39 @@ Por favor espera unos segundos mientras la IA razona y estructura el blueprint..
       if (!servers || servers.length === 0) {
         return `<div class="empty-servers-msg" style="padding: 18px 0; color: var(--ink-muted); font-size: 13px;">No hay servidores de desarrollo activos en este momento. Cuando la IA o tú ejecuten un proyecto con Vite o Node.js, aparecerá aquí automáticamente.</div>`;
       }
-      return servers.map(s => `
+      return servers.map(s => {
+        const isTunnel = s.is_tunnel || !s.port || (s.command && (s.command.includes('run_tunnel') || s.command.includes('cloudflared')));
+        const hasUrl = s.url && s.url.startsWith('http');
+
+        if (isTunnel) {
+          return `
+          <div class="dev-server-card" style="display: flex; align-items: center; justify-content: space-between; padding: ${isCompact ? '12px 16px' : '16px 20px'}; background: var(--surface-card); border: 1px solid rgba(59, 130, 246, 0.25); border-radius: var(--radius-md); box-shadow: var(--shadow-card); margin-bottom: 10px;">
+            <div style="display: flex; align-items: center; gap: 14px;">
+              <div style="width: 38px; height: 38px; border-radius: 8px; background: rgba(59, 130, 246, 0.12); color: #3b82f6; display: flex; align-items: center; justify-content: center; font-size: 18px;">
+                ☁️
+              </div>
+              <div>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                  <span style="font-family: var(--font-display); font-size: 15px; font-weight: 700; color: var(--ink-primary);">${s.project || 'Túnel Cloudflare'}</span>
+                  <span style="font-family: var(--font-mono); font-size: 10px; padding: 2px 8px; border-radius: 4px; background: rgba(59, 130, 246, 0.12); color: #2563eb; font-weight: 700; border: 1px solid rgba(59, 130, 246, 0.3);">TÚNEL ACTIVO ☁️</span>
+                </div>
+                <div style="font-size: 11.5px; color: var(--ink-muted); display: flex; gap: 14px; margin-top: 4px; align-items: center; flex-wrap: wrap;">
+                  <span>PID: <code style="font-family: var(--font-mono); color: var(--ink-primary); background: var(--surface-elevated); padding: 1px 4px; border-radius: 3px;">${s.pid}</code></span>
+                  <span>Ruta: <code style="font-family: var(--font-mono); color: var(--ink-secondary);">${s.cwd || 'Downloads'}</code></span>
+                  ${hasUrl ? `<a href="${s.url}" target="_blank" rel="noopener noreferrer" style="color: #2563eb; text-decoration: underline; font-weight: 600; display: inline-flex; align-items: center; gap: 4px;"><span>🔗</span> ${s.url} ↗</a>` : `<span style="color: var(--ink-muted); font-style: italic;">Retransmisión de tráfico web activa</span>`}
+                </div>
+              </div>
+            </div>
+            <div style="display: flex; gap: 8px; align-items: center;">
+              ${hasUrl ? `<a href="${s.url}" target="_blank" rel="noopener noreferrer" class="btn-secondary" style="font-size: 11.5px; padding: 6px 12px; text-decoration: none;">Abrir Túnel ↗</a>` : ''}
+              <button class="btn-stop-single-server btn-ghost danger-text" data-pid="${s.pid}" data-port="" style="font-size: 11.5px; font-weight: 600; padding: 6px 12px; cursor: pointer; display: flex; align-items: center; gap: 4px; border: 1px solid rgba(153, 27, 27, 0.2); border-radius: 6px;">
+                ⏹️ Detener Túnel
+              </button>
+            </div>
+          </div>`;
+        }
+
+        return `
         <div class="dev-server-card" style="display: flex; align-items: center; justify-content: space-between; padding: ${isCompact ? '12px 16px' : '16px 20px'}; background: var(--surface-card); border: 1px solid var(--border-stone); border-radius: var(--radius-md); box-shadow: var(--shadow-card); margin-bottom: 10px;">
           <div style="display: flex; align-items: center; gap: 14px;">
             <div style="width: 38px; height: 38px; border-radius: 8px; background: rgba(16, 185, 129, 0.12); color: #10b981; display: flex; align-items: center; justify-content: center; font-size: 18px;">
@@ -2196,22 +2228,23 @@ Por favor espera unos segundos mientras la IA razona y estructura el blueprint..
               <div style="font-size: 11.5px; color: var(--ink-muted); display: flex; gap: 14px; margin-top: 4px; align-items: center; flex-wrap: wrap;">
                 <span>PID: <code style="font-family: var(--font-mono); color: var(--ink-primary); background: var(--surface-elevated); padding: 1px 4px; border-radius: 3px;">${s.pid}</code></span>
                 <span>Ruta: <code style="font-family: var(--font-mono); color: var(--ink-secondary);">${s.cwd || 'Downloads'}</code></span>
-                <a href="${s.url}" target="_blank" style="color: var(--terracotta); text-decoration: none; font-weight: 600; display: inline-flex; align-items: center; gap: 4px;">
+                <a href="${s.url}" target="_blank" rel="noopener noreferrer" style="color: var(--terracotta); text-decoration: none; font-weight: 600; display: inline-flex; align-items: center; gap: 4px;">
                   <span>🔗</span> Abrir ${s.url}
                 </a>
               </div>
             </div>
           </div>
           <div style="display: flex; gap: 8px; align-items: center;">
-            <a href="${s.url}" target="_blank" class="btn-secondary" style="font-size: 11.5px; padding: 6px 12px; text-decoration: none;">
+            <a href="${s.url}" target="_blank" rel="noopener noreferrer" class="btn-secondary" style="font-size: 11.5px; padding: 6px 12px; text-decoration: none;">
               Abrir Web
             </a>
-            <button class="btn-stop-single-server btn-ghost danger-text" data-pid="${s.pid}" data-port="${s.port}" style="font-size: 11.5px; font-weight: 600; padding: 6px 12px; cursor: pointer; display: flex; align-items: center; gap: 4px; border: 1px solid rgba(153, 27, 27, 0.2); border-radius: 6px;">
+            <button class="btn-stop-single-server btn-ghost danger-text" data-pid="${s.pid}" data-port="${s.port || ''}" style="font-size: 11.5px; font-weight: 600; padding: 6px 12px; cursor: pointer; display: flex; align-items: center; gap: 4px; border: 1px solid rgba(153, 27, 27, 0.2); border-radius: 6px;">
               ⏹️ Detener
             </button>
           </div>
         </div>
-      `).join("");
+      `;
+      }).join("");
     }
 
     function wireStopButtons(container) {
@@ -2476,6 +2509,50 @@ Por favor espera unos segundos mientras la IA razona y estructura el blueprint..
     }));
   }
 
+  // Helper UI para renderizar enlace clickable de Cloudflare
+  function renderCfUrlSuccess(url, note, isWarn = false) {
+    const icon = isWarn ? '[WARN]' : '[OK]';
+    const color = isWarn ? '#f59e0b' : '#10b981';
+    return '<div style="font-size:24px;margin-bottom:10px;">' + icon + '</div>' +
+      '<div style="margin:14px 0;">' +
+        '<a href="' + url + '" target="_blank" rel="noopener noreferrer" style="display:inline-flex;align-items:center;gap:10px;font-family:JetBrains Mono,monospace;font-size:13.5px;color:' + color + ';font-weight:700;word-break:break-all;padding:12px 18px;background:rgba(16,185,129,0.08);border:1.5px solid ' + color + ';border-radius:8px;text-decoration:none;box-shadow:0 3px 10px rgba(0,0,0,0.06);cursor:pointer;transition:all 0.2s;" title="Clic para abrir el túnel de Cloudflare en una nueva pestaña">' +
+          '<span style="font-size:18px;">🌐</span>' +
+          '<span style="text-decoration:underline;">' + url + '</span>' +
+          '<span style="font-size:11px;padding:3px 8px;border-radius:4px;background:' + color + ';color:#fff;font-weight:bold;margin-left:6px;text-decoration:none;display:inline-flex;align-items:center;gap:3px;">Abrir ↗</span>' +
+        '</a>' +
+      '</div>' +
+      '<div style="display:flex;gap:10px;justify-content:center;align-items:center;margin-top:10px;flex-wrap:wrap;">' +
+        '<button id="btn-copy-cf-url" type="button" data-url="' + url + '" style="cursor:pointer;padding:7px 16px;font-size:12px;font-weight:700;border-radius:6px;border:1px solid #10b981;background:#10b981;color:#fff;display:inline-flex;align-items:center;gap:6px;box-shadow:0 2px 6px rgba(16,185,129,0.25);">📋 Copiar Enlace</button>' +
+        '<a href="' + url + '" target="_blank" rel="noopener noreferrer" style="cursor:pointer;padding:7px 16px;font-size:12px;font-weight:700;border-radius:6px;border:1px solid var(--border-stone);background:var(--surface-elevated);color:var(--ink-primary);text-decoration:none;display:inline-flex;align-items:center;gap:6px;box-shadow:0 1px 4px rgba(0,0,0,0.05);">🚀 Abrir en Navegador ↗</a>' +
+      '</div>' +
+      '<div style="font-size:11.5px;color:#8b8579;margin-top:12px;">' + (note || 'Túnel activo. Haz clic en el enlace verde o en el botón para abrir tu proyecto.') + '</div>';
+  }
+
+  function attachCfCopyHandler(resultBox, url) {
+    if (!resultBox) return;
+    const copyBtn = resultBox.querySelector('#btn-copy-cf-url');
+    if (copyBtn) {
+      copyBtn.addEventListener('click', function(ev) {
+        ev.preventDefault();
+        const u = this.getAttribute('data-url') || url;
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(u).then(() => {
+            copyBtn.textContent = '✓ ¡Enlace Copiado!';
+            copyBtn.style.background = '#059669';
+            setTimeout(() => { 
+              copyBtn.textContent = '📋 Copiar Enlace'; 
+              copyBtn.style.background = '#10b981';
+            }, 2500);
+          }).catch(() => {
+            window.prompt('Copia este enlace de Cloudflare:', u);
+          });
+        } else {
+          window.prompt('Copia este enlace de Cloudflare:', u);
+        }
+      });
+    }
+  }
+
   async function exposeCloudflare() {
     const port = document.getElementById('cf-port').value.trim();
     if (!port) { alert('Por favor, ingresa un puerto.'); return; }
@@ -2528,23 +2605,25 @@ Por favor espera unos segundos mientras la IA razona y estructura el blueprint..
     }
 
     // Puerto OK. Lanzar Cloudflare
-    resultBox.innerHTML = '<div style="font-size:24px;margin-bottom:10px;">[WAIT]</div><div style="font-family:JetBrains Mono,monospace;font-size:12px;color:#8b8579;">Servidor en puerto ' + port + ' OK. Iniciando tunel...</div>';
+    resultBox.innerHTML = '<div style="font-size:24px;margin-bottom:10px;">[WAIT]</div><div style="font-family:JetBrains Mono,monospace;font-size:12px;color:#8b8579;">Servidor en puerto ' + port + ' OK. Iniciando túnel Cloudflare...</div>';
     
-    ws.send(JSON.stringify({ type: "call_tool", id: "del_cf_txt", name: "hermes_terminal", arguments: { command: "del /f /q cf_url.txt", is_daemon: false } }));
+    const delCmd = 'cd /d "%USERPROFILE%\\Downloads\\GHS-Script-Free" && if exist cf_url.txt del /f /q cf_url.txt';
+    ws.send(JSON.stringify({ type: "call_tool", id: "del_cf_txt", name: "hermes_terminal", arguments: { command: delCmd, is_daemon: false } }));
     
     const cmd = 'cd /d "%USERPROFILE%\\Downloads\\GHS-Script-Free" && run_tunnel.bat ' + port;
     ws.send(JSON.stringify({ type: "call_tool", id: "run_tunnel_daemon", name: "hermes_terminal", arguments: { command: cmd, is_daemon: true } }));
     
-    // Polling
+    // Polling mejorado (hasta 25 intentos = 50 segundos con indicador visual de progreso)
     let attempts = 0;
-    const maxAttempts = 15;
+    const maxAttempts = 25;
     const pollInterval = setInterval(function() {
         attempts++;
         if (attempts > maxAttempts) {
             clearInterval(pollInterval);
-            resultBox.innerHTML = '<div style="font-size:24px;margin-bottom:10px;">[ERR]</div><div style="font-size:12px;color:#ef4444;">Timeout en Cloudflare.</div>';
+            resultBox.innerHTML = '<div style="font-size:24px;margin-bottom:10px;">[ERR]</div><div style="font-size:12px;color:#ef4444;">Timeout en Cloudflare. Revisa la Consola de Logs o vuelve a intentar.</div>';
             return;
         }
+        resultBox.innerHTML = '<div style="font-size:24px;margin-bottom:10px;">[WAIT]</div><div style="font-family:JetBrains Mono,monospace;font-size:12px;color:#8b8579;">Conectando túnel Cloudflare... (' + attempts + '/' + maxAttempts + ')</div>';
         ws.send(JSON.stringify({ type: "call_tool", id: "read_tunnel_url_poll", name: "hermes_file_read", arguments: { path: "cf_url.txt" } }));
     }, 2000);
     
@@ -2669,20 +2748,24 @@ Por favor espera unos segundos mientras la IA razona y estructura el blueprint..
         if (window._cfPollInterval) { clearInterval(window._cfPollInterval); window._cfPollInterval = null; }
         const url = urlMatch[0];
         
-        // PASO 4: Health Check de la URL publica
-        resultBox.innerHTML = '<div style="font-size:24px;margin-bottom:10px;">[WAIT]</div><div style="font-size:12px;color:#8b8579;">URL obtenida. Verificando respuesta HTTP...</div>';
+        // Renderizar inmediatamente el enlace clickable y botón de copiar
+        resultBox.innerHTML = renderCfUrlSuccess(url, 'Túnel activo. Verificando conectividad...');
+        attachCfCopyHandler(resultBox, url);
         
-        // Hacemos un fetch a la URL publica para ver si responde 200
+        // PASO 4: Health Check opcional de la URL publica
         fetch(url, { method: 'GET', mode: 'cors' })
           .then(function(res) {
             if (res.ok || res.status === 0) {
-              resultBox.innerHTML = '<div style="font-size:24px;margin-bottom:10px;">[OK]</div><div style="font-family:JetBrains Mono,monospace;font-size:13px;color:#10b981;font-weight:bold;word-break:break-all;padding:10px;">' + url + '</div><div style="font-size:11px;color:#8b8579;margin-top:10px;">Tunel verificado y activo.</div>';
+              resultBox.innerHTML = renderCfUrlSuccess(url, 'Túnel verificado y 100% activo en internet.');
+              attachCfCopyHandler(resultBox, url);
             } else {
-              resultBox.innerHTML = '<div style="font-size:24px;margin-bottom:10px;">[WARN]</div><div style="font-family:JetBrains Mono,monospace;font-size:12px;color:#f59e0b;word-break:break-all;">' + url + '</div><div style="font-size:11px;color:#8b8579;margin-top:10px;">El tunel responde con codigo ' + res.status + '. Puede que el servidor local no este listo.</div>';
+              resultBox.innerHTML = renderCfUrlSuccess(url, 'El túnel responde con código ' + res.status + '. Si tu servidor local está terminando de compilar, abre el enlace.', false);
+              attachCfCopyHandler(resultBox, url);
             }
           })
           .catch(function(err) {
-            resultBox.innerHTML = '<div style="font-size:24px;margin-bottom:10px;">[WARN]</div><div style="font-family:JetBrains Mono,monospace;font-size:12px;color:#f59e0b;word-break:break-all;">' + url + '</div><div style="font-size:11px;color:#8b8579;margin-top:10px;">El tunel se creo pero la verificacion CORS fallo.</div>';
+            resultBox.innerHTML = renderCfUrlSuccess(url, 'Túnel activo y listo para usar en internet.');
+            attachCfCopyHandler(resultBox, url);
           });
       }
       return true;
@@ -2693,19 +2776,9 @@ Por favor espera unos segundos mientras la IA razona y estructura el blueprint..
       let raw = msg.text || (msg.content && msg.content[0] && msg.content[0].text) || '';
       const urlMatch = raw.match(/https:\/\/[a-zA-Z0-9-]+\.trycloudflare\.com/);
       if (urlMatch) {
-        // URL encontrada! Limpiar polling y mostrar resultado
         if (window._cfPollInterval) { clearInterval(window._cfPollInterval); window._cfPollInterval = null; }
-        resultBox.innerHTML = '<div style="font-size:24px;margin-bottom:10px;">[OK]</div><div style="font-family:JetBrains Mono,monospace;font-size:13px;color:#10b981;font-weight:bold;word-break:break-all;padding:10px;">' + urlMatch[0] + '</div><div style="font-size:11px;color:#8b8579;margin-top:10px;">Tunel activo. Comparte este enlace.</div>';
-      }
-      return true;
-    }
-    if (msg.id === 'read_tunnel_url') {
-      const resultBox = document.getElementById('cf-result');
-      if (!resultBox) return false;
-      let raw = msg.text || (msg.content && msg.content[0] && msg.content[0].text) || '';
-      const urlMatch = raw.match(/https:\/\/[a-zA-Z0-9-]+\.trycloudflare\.com/);
-      if (urlMatch) {
-        resultBox.innerHTML = '<div style="font-size:24px;margin-bottom:10px;">[OK]</div><div style="font-family:JetBrains Mono,monospace;font-size:13px;color:#10b981;font-weight:bold;word-break:break-all;padding:10px;">' + urlMatch[0] + '</div><div style="font-size:11px;color:#8b8579;margin-top:10px;">Tunel activo. Comparte este enlace.</div>';
+        resultBox.innerHTML = renderCfUrlSuccess(urlMatch[0], 'Túnel activo. Haz clic en el enlace para abrir tu proyecto.');
+        attachCfCopyHandler(resultBox, urlMatch[0]);
       } else {
         resultBox.innerHTML = '<div style="font-size:24px;margin-bottom:10px;">[ERR]</div><div style="font-size:12px;color:#ef4444;">No se pudo extraer la URL. Revisa la Consola de Logs.</div>';
       }
@@ -2717,7 +2790,8 @@ Por favor espera unos segundos mientras la IA razona y estructura el blueprint..
       const raw = msg.text || '';
       const urlMatch = raw.match(/https:\/\/[a-zA-Z0-9-]+\.trycloudflare\.com/);
       if (urlMatch) {
-        resultBox.innerHTML = '<div style="font-size:24px;margin-bottom:10px;">[OK]</div><div style="font-family:JetBrains Mono,monospace;font-size:13px;color:#10b981;font-weight:bold;word-break:break-all;padding:10px;">' + urlMatch[0] + '</div><div style="font-size:11px;color:#8b8579;margin-top:10px;">Tunel activo. Comparte este enlace.</div>';
+        resultBox.innerHTML = renderCfUrlSuccess(urlMatch[0], 'Túnel activo. Haz clic en el enlace para abrir tu proyecto.');
+        attachCfCopyHandler(resultBox, urlMatch[0]);
       } else if (msg.error) {
         resultBox.innerHTML = '<div style="font-size:24px;margin-bottom:10px;">[ERR]</div><div style="font-size:12px;color:#ef4444;">Error: ' + msg.error + '</div>';
       } else {

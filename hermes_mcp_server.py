@@ -2440,7 +2440,11 @@ def _save_dev_server_registry(reg: Dict[str, Any]) -> None:
 def _register_dev_server(pid: int, port: Optional[int] = None, url: Optional[str] = None, project: Optional[str] = None, cwd: Optional[str] = None, command: Optional[str] = None) -> None:
     reg = _load_dev_server_registry()
     proj_name = project
-    if not proj_name and cwd:
+    cmd_lower = (command or "").lower()
+    is_tunnel = "run_tunnel" in cmd_lower or "cloudflared" in cmd_lower
+    if is_tunnel:
+        proj_name = f"Túnel Cloudflare ({proj_name})" if proj_name else "Túnel Cloudflare"
+    elif not proj_name and cwd:
         proj_name = os.path.basename(os.path.normpath(cwd))
     if not proj_name:
         proj_name = f"Servidor Web (Puerto {port})" if port else f"Proceso Dev (PID {pid})"
@@ -2453,9 +2457,11 @@ def _register_dev_server(pid: int, port: Optional[int] = None, url: Optional[str
         "project": proj_name,
         "cwd": cwd or "",
         "command": command or "",
+        "is_tunnel": is_tunnel,
         "started_at": time.time()
     }
     _save_dev_server_registry(reg)
+
 
 def _unregister_dev_server(pid: int) -> None:
     reg = _load_dev_server_registry()
@@ -2518,6 +2524,12 @@ def resolve_target_path(path: str) -> str:
         ws_dir = os.path.join(get_base_workspace(), "agent_workspace")
         os.makedirs(ws_dir, exist_ok=True)
         return os.path.join(ws_dir, "ghs_project_state.json")
+
+    # 2.1 Interceptor universal para cf_url.txt (Túnel Cloudflare)
+    if bname == "CF_URL.TXT":
+        ghs_dir = os.path.normpath(os.path.dirname(os.path.abspath(__file__)))
+        return os.path.join(ghs_dir, "cf_url.txt")
+
 
     # 3. Limpieza de rutas de Windows cuando corremos en Linux / Render
     if sys.platform != "win32" and re.match(r'^[a-zA-Z]:[\\/]', raw):
@@ -2974,11 +2986,24 @@ def _tool_dev_server(arguments: Dict[str, Any]) -> Dict[str, Any]:
                         if any(x in cmd_p for x in ["hermes_mcp_server", "bridge.py", "openai_server", "mcp"]):
                             continue
                         if p.is_running() and p.status() != psutil.STATUS_ZOMBIE:
+                            # Auto-extraer URL de Cloudflare si es un túnel activo y aún no tiene URL registrada
+                            if info.get("is_tunnel") and not info.get("url"):
+                                try:
+                                    ghs_dir = os.path.normpath(os.path.dirname(os.path.abspath(__file__)))
+                                    cf_txt = os.path.join(ghs_dir, "cf_url.txt")
+                                    if os.path.exists(cf_txt):
+                                        with open(cf_txt, "r", encoding="utf-8", errors="ignore") as f_cf:
+                                            m_url = re.search(r"https://[a-zA-Z0-9-]+\.trycloudflare\.com", f_cf.read())
+                                            if m_url:
+                                                info["url"] = m_url.group(0)
+                                except Exception:
+                                    pass
                             updated_reg[pid_str] = info
                             registered_pids.add(pid)
                             for child in p.children(recursive=True):
                                 registered_pids.add(child.pid)
                             servers.append(info)
+
                 except Exception:
                     pass
             _save_dev_server_registry(updated_reg)
