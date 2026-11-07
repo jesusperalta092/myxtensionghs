@@ -346,7 +346,7 @@ Antes de modificar archivos existentes en proyectos de código:
 ━━━ ⚡ REGLA FULL-STACK: ANDAMIAJE CON HERMES_BATCH_SCAFFOLD ━━━
 Para crear plataformas, dashboards, o proyectos React/Vite/Next.js/Node:
 1. NUNCA uses 'npm create vite' o comandos interactivos por terminal (se cuelgan en Windows esperando confirmación de teclado).
-2. Usa SIEMPRE 'hermes_batch_scaffold' pasando la estructura completa de archivos (package.json, index.html, vite.config.ts, tsconfig.json, App.tsx, etc.) en un solo turno atómico de 50ms sin riesgo de bloqueo.
+2. Usa SIEMPRE 'hermes_batch_scaffold' pasando la estructura completa de archivos (package.json, index.html, vite.config.ts [con server: { port: 5173, host: true, allowedHosts: true }], tsconfig.json, App.tsx, etc.) en un solo turno atómico de 50ms sin riesgo de bloqueo.
 3. Para instalar dependencias o levantar servidores con hermes_terminal, usa: npm.cmd install --no-audit --no-fund (o hermes_dev_server).
 
 ━━━ 📸 REGLA VISUAL: FOTOGRAFÍA REAL VS 3D / SILUETAS ━━━

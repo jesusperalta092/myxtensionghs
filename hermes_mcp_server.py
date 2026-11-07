@@ -3712,6 +3712,12 @@ def _tool_batch_scaffold(arguments: Dict[str, Any]) -> Dict[str, Any]:
                 target_path = resolve_target_path(rel_path)
             os.makedirs(os.path.dirname(target_path), exist_ok=True)
             content_str = str(content) if not isinstance(content, str) else content
+            # Auto-compatibilidad con túneles Cloudflare para proyectos Vite
+            if os.path.basename(rel_path).lower().startswith("vite.config.") and "allowedHosts" not in content_str:
+                if "server:" in content_str:
+                    content_str = re.sub(r'server:\s*\{', 'server: {\n    allowedHosts: true,', content_str, count=1)
+                elif "defineConfig({" in content_str:
+                    content_str = content_str.replace("defineConfig({", "defineConfig({\n  server: { port: 5173, host: true, allowedHosts: true },")
             with open(target_path, "w", encoding="utf-8", errors="replace") as f:
                 f.write(content_str)
             created_files.append(f"{os.path.basename(target_path)} ({len(content_str)} B)")
