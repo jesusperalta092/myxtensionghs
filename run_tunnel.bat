@@ -10,4 +10,4 @@ if not exist "%CF_BIN%" (
     set "CF_BIN=cloudflared.exe"
 )
 
-"%CF_BIN%" tunnel --url http://localhost:%1 > "%SCRIPT_DIR%cf_url.txt" 2>&1
+"%CF_BIN%" tunnel --url http://localhost:%1 --http-host-header localhost > "%SCRIPT_DIR%cf_url.txt" 2>&1
